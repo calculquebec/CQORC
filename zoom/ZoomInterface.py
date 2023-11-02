@@ -9,26 +9,20 @@ class ZoomInterface:
     auth_token_url = "https://zoom.us/oauth/token"
     api_base_url = "https://api.zoom.us/v2"
 
-    def __init__(self):
-        self.load_secrets()
-
-    def load_secrets(self):
-        self.secrets = configparser.ConfigParser()
-        self.secrets.read_file(open('secrets.cfg'))
+    def __init__(self, account_id, client_id, client_secret):
+        self.account_id = account_id
+        self.client_id = client_id
+        self.client_secret = client_secret
 
     def get_authorization_header(self):
         # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
-        account_id = self.secrets['zoom']['account_id']
-        client_id = self.secrets['zoom']['client_id']
-        client_secret = self.secrets['zoom']['client_secret']
-
         data = {
             "grant_type": "account_credentials",
-            "account_id": account_id,
-            "client_secret": client_secret
+            "account_id": self.account_id,
+            "client_secret": self.client_secret
         }
         response = requests.post(self.auth_token_url,
-                                 auth=(client_id, client_secret),
+                                 auth=(self.client_id, self.client_secret),
                                  data=data)
 
         if response.status_code!=200:
@@ -108,7 +102,11 @@ class ZoomInterface:
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportWebinarParticipants
 
 def main():
-    zoom = ZoomInterface()
+    secrets = configparser.ConfigParser()
+    secrets_path = os.getenv('ZOOM_SECRETS') or '../secrets.cfg'
+    secrets.read_file(open(secrets_path))
+    secrets = secrets['zoom']
+    zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'])
     print(str(zoom.get_authorization_header()))
 
     print(str(zoom.create_meeting("Meeting test", "60", "2023-11-01", "13:00:00")))
