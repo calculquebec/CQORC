@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 
 import requests
-import configparser
-
 
 class ZoomInterface:
     # constants
@@ -102,6 +100,8 @@ class ZoomInterface:
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportWebinarParticipants
 
 def main():
+    import configparser
+    import os
     secrets = configparser.ConfigParser()
     secrets_path = os.getenv('ZOOM_SECRETS') or '../secrets.cfg'
     secrets.read_file(open(secrets_path))
