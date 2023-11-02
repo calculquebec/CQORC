@@ -48,7 +48,7 @@ class ZoomInterface:
             #"jbh_time": 5,
             #"join_before_host": "true",
             'start_time': f'{start_date}T{start_time}',
-            "timezone": "America/Montreal"
+            "timezone": "America/Montreal",
             "type": 2,
         }
 
@@ -74,30 +74,37 @@ class ZoomInterface:
     def list_meetings(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetings
+        pass
 
     def get_meeting_participants(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportMeetingParticipants
+        pass
 
     def create_webinar(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarCreate
+        pass
 
     def add_panelist(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarPanelistCreate
+        pass
 
     def list_webinars(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
+        pass
 
     def update_webinar(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarUpdate
+        pass
 
     def get_webinar_participants(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportWebinarParticipants
+        pass
 
 def main():
     import configparser
