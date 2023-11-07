@@ -1,21 +1,59 @@
 #!/usr/bin/env python3
 import datetime
 import logging
+import os
 
-from oauth2client.service_account import ServiceAccountCredentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.oauth2.credentials import Credentials
+from google.auth.transport.requests import Request
+from oauth2client.service_account import ServiceAccountCredentials
+
 class GCalInterface:
-    def __init__(self, service_account_key_file, calendar_id):
+    def __init__(self, service_account_key_file, calendar_id, credential_type='user'):
         self.key_file = service_account_key_file
         self.calendar_id = calendar_id
         self.logger = logging.getLogger(__name__)
-        self.scopes = ['https://www.googleapis.com/auth/calendar']
+        self.scopes = ['https://www.googleapis.com/auth/calendar.events']
         self.credentials = None
         self.service = None
+        self.timezone = "America/Montreal"
+        self.credential_type = credential_type
+
 
     def get_credentials(self):
+        if self.credential_type == "user":
+            return self.get_user_credentials()
+        elif self.credential_type == "service":
+            return self.get_service()
+
+
+    def get_user_credentials(self):
+        if not self.credentials or not self.credentials.valid:
+            # The file token.json stores the user's access and refresh tokens, and is
+            # created automatically when the authorization flow completes for the first
+            # time.
+            if os.path.exists("token.json"):
+                self.credentials = Credentials.from_authorized_user_file("token.json", self.scopes)
+            # If there are no (valid) credentials available, let the user log in.
+            if not self.credentials or not self.credentials.valid:
+                if self.credentials and self.credentials.expired and self.credentials.refresh_token:
+                    self.credentials.refresh(Request())
+                else:
+                    flow = InstalledAppFlow.from_client_secrets_file(
+                            self.key_file, self.scopes
+                            )
+                    self.credentials = flow.run_local_server(port=0)
+                # Save the credentials for the next run
+                with open("token.json", "w") as token:
+                    token.write(self.credentials.to_json())
+
+        return self.credentials
+
+
+    def get_service_credentials(self):
         """Creates a Credential object with the correct OAuth2 authorization.
         Uses the service account key stored in self.key_file
         Returns:
@@ -32,6 +70,7 @@ class GCalInterface:
 
         return self.credentials
 
+
     def get_service(self):
         if not self.service:
             try:
@@ -41,6 +80,7 @@ class GCalInterface:
                 print('An error occurred: %s' % error)
 
         return self.service
+
 
     def get_events(self, start_time, limit=10):
         try:
@@ -74,40 +114,8 @@ def main():
     for event in events:
         #        print(str(event))
         start = event['start'].get('dateTime', event['start'].get('date'))
-        print(start, event['summary'], event.get('description', ''))
+        print(start, event.get('summary', ''), event.get('description', ''))
 
 if __name__ == "__main__":
     main()
 
-# Refer to the Python quickstart on how to setup the environment:
-# https://developers.google.com/calendar/quickstart/python
-# Change the scope to 'https://www.googleapis.com/auth/calendar' and delete any
-# stored credentials.
-
-event = {
-  'summary': 'Google I/O 2015',
-  'location': '800 Howard St., San Francisco, CA 94103',
-  'description': 'A chance to hear more about Google\'s developer products.',
-  'start': {
-    'dateTime': '2015-05-28T09:00:00-07:00',
-    'timeZone': 'America/Los_Angeles',
-  },
-  'end': {
-    'dateTime': '2015-05-28T17:00:00-07:00',
-    'timeZone': 'America/Los_Angeles',
-  },
-  'recurrence': [
-    'RRULE:FREQ=DAILY;COUNT=2'
-  ],
-  'attendees': [
-    {'email': 'lpage@example.com'},
-    {'email': 'sbrin@example.com'},
-  ],
-  'reminders': {
-    'useDefault': False,
-    'overrides': [
-      {'method': 'email', 'minutes': 24 * 60},
-      {'method': 'popup', 'minutes': 10},
-    ],
-  },
-}
