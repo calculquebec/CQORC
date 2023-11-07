@@ -94,6 +94,31 @@ class GCalInterface:
             print('An error occurred: %s' % error)
 
 
+    def create_event(self, start_time, end_time, summary, description, attendees):
+        # create an event
+        # documentation: https://developers.google.com/calendar/api/v3/reference/events/insert
+        try:
+            # reference for fields of an event
+            # https://developers.google.com/calendar/api/v3/reference/events#resource
+            event_dict = {}
+            event_dict['start'] = {'dateTime': start_time, 'timeZone': self.timezone}
+            event_dict['end'] = {'dateTime': end_time, 'timeZone': self.timezone}
+            event_dict['summary'] = summary
+            event_dict['description'] = description
+            if isinstance(attendees, str):
+                attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            event_dict['attendees'] = attendees
+
+            event = self.get_service().events().insert(
+                        calendarId=self.calendar_id,
+                        body=event_dict
+                        ).execute()
+            print("Event created: %s" % (event.get('htmlLink')))
+        except HttpError as error:
+            print('An error occurred: %s' % error)
+
+
+
 def main():
     import configparser
     import os
@@ -104,6 +129,8 @@ def main():
     gcal = GCalInterface(secrets['credentials_file'], secrets['calendar_id'])
 
     # Call the Calendar API
+    now_dt = datetime.datetime.utcnow()
+#    gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
     events = gcal.get_events(now, 20)
     if not events:
