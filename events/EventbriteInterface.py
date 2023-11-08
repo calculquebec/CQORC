@@ -144,7 +144,7 @@ class EventbriteInterface(eb.Eventbrite):
         # Create the event
         response = self.post(f"/events/{event_id}/copy/", data=obj)
         if response.ok:
-            self.logger.debug(f"Created event {response["id"]}")
+            self.logger.debug(f"Created event {response['id']}")
             print(f'Successfully created {response["name"]["text"]} {response["start"]["local"]} {response["end"]["local"]}')
         else:
             self.logger.error(f'Error creating event! Got {response}')
