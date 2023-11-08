@@ -1,3 +1,5 @@
 venv
 secrets.cfg
 *.googleusercontent.com.json
+credentials.json
+token.json
