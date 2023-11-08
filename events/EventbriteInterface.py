@@ -152,6 +152,33 @@ class EventbriteInterface(eb.Eventbrite):
 
         return response["id"]
 
+    def update_tickets(self, event_id, close_prior=12):
+        """
+        Update tickets class.
+
+        Parameters
+        ----------
+        event_id:    Event id to update
+        close_prior: Set sales end prior to (hours), default: 12
+
+        Returns
+        -------
+        None
+        """
+        event = self._raise_or_ok(self.get_event(event_id))
+        start_date = self._to_iso8061(event['start']['local'])
+        ticket_classes_response = self._raise_or_ok(self.get(f"/events/{event_id}/ticket_classes/"))
+
+        for ticket_class in ticket_classes_response['ticket_classes']:
+            obj = {
+                "ticket_class": {
+                    "sales_start": "",
+                    "sales_end": (start_date - timedelta(hours=close_prior)).astimezone(timezone.utc).strftime(self.UTC_FMT)
+                }
+            }
+            self._raise_or_ok(self.post(f"/events/{event_id}/ticket_classes/{ticket_class['id']}/", data=obj))
+
+        print(f'Successfully updated {event_id} ticket classes')
 
 if __name__ == '__main__':
     config = configparser.ConfigParser()
