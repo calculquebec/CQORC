@@ -180,6 +180,21 @@ class EventbriteInterface(eb.Eventbrite):
 
         print(f'Successfully updated {event_id} ticket classes')
 
+    def get_event_desc(self, event_id):
+        """
+        Get the template event description section.
+        Calls specific html endpoint, this contains the summary and the description in html.
+
+        Parameters
+        ----------
+        event_id: template id
+
+        Returns
+        -------
+        HTML object representing the description
+        """
+        return self._raise_or_ok(self.get(f'/events/{event_id}/description/')
+
 if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read([os.environ.get('EVENTBRITE_SECRETS', '../secrets.cfg'), 'eventbrite.cfg'])
