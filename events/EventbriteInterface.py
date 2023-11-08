@@ -4,17 +4,23 @@ import os
 import itertools
 import functools
 import configparser
+import logging
+from datetime import datetime, timedelta, timezone
 
 
 class EventbriteInterface(eb.Eventbrite):
+    """
+    Extend Eventbrite class.
+    """
     EVENT_TIME_FILTERS = ("past", "current_future", "all")
     EVENT_STATUSES = ("draft", "live", "started", "ended", "canceled", "all")
     UTC_FMT = '%Y-%m-%dT%H:%M:%SZ'
     ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 
-    """
-    Extend Eventbrite class.
-    """
+    def __init__(self, token):
+        super(EventbriteInterface, self).__init__(token)
+        self.logger = logging.getLogger(__name__)
+
     @functools.lru_cache
     def get_pages(self, url, key, **params):
         """
@@ -77,6 +83,74 @@ class EventbriteInterface(eb.Eventbrite):
             return self.get_unpaginated(url, "events", **params)
         else:
             return self.get_pages(url, "events", **params)
+
+    def _raise_or_ok(self, response):
+        """
+        Raise exception if response is not OK
+        """
+        if response.ok:
+            return response
+        else:
+            raise Exception(response)
+
+    def _to_iso8061(self, dt, tz=None):
+        """
+        Returns full long ISO 8061 datetime with timezone.
+
+        eg:
+            '2018-09-12' -> '2018-09-12T00:00:00-04:00'
+            '2018-09-12T00:00:00+00:30' -> '2018-09-11T19:30:00-04:00'
+        """
+        if isinstance(dt, datetime):
+            return dt.astimezone(tz)
+        else:
+            return datetime.fromisoformat(dt).astimezone(tz)
+
+    def create_event_from(self, event_id, title, start_date, end_date, tz, summary="[[SUMMARY]]"):
+        """
+        Copy and create an event from the event id.
+
+        Parameters
+        ----------
+            event_id:   The template event id to copy from
+            title:      Event title
+            start_date: Event start date (iso8061)
+            end_date:   Event end date (iso8061)
+            tz:         Event timezone
+            summary:    Event summary, default to [[SUMMARY]] to be updated later
+
+        Returns
+        -------
+        event_id: Newly created event id
+
+        Examples
+        --------
+        >>> create_event_from(config[templates]['fr_event_id'], 'my title', '2023-12-01T09:00:00', '2023-12-01T12:00:00', 'America/Toronto')
+        9882121212121
+
+        """
+        start_date = self._to_iso8061(start_date)
+        end_date = self._to_iso8061(end_date)
+
+        # Eventbrite requires the dates in UTC
+        obj = {
+            "name": title,
+            "start_date": start_date.astimezone(timezone.utc).strftime(self.UTC_FMT),
+            "end_date": end_date.astimezone(timezone.utc).strftime(self.UTC_FMT),
+            'timezone': tz,
+            "summary": summary,
+        }
+
+        # Create the event
+        response = self.post(f"/events/{event_id}/copy/", data=obj)
+        if response.ok:
+            self.logger.debug(f"Created event {response["id"]}")
+            print(f'Successfully created {response["name"]["text"]} {response["start"]["local"]} {response["end"]["local"]}')
+        else:
+            self.logger.error(f'Error creating event! Got {response}')
+            raise Exception(response)
+
+        return response["id"]
 
 
 if __name__ == '__main__':
