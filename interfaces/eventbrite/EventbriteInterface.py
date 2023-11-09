@@ -195,6 +195,20 @@ class EventbriteInterface(eb.Eventbrite):
         """
         return self._raise_or_ok(self.get(f'/events/{event_id}/description/'))
 
+    def delete_event(self, event_id):
+        """
+        Delete an event.
+
+        Parameters
+        ----------
+        event_id: Event id to delete
+
+        Returns
+        -------
+        Json object containing deleted true or false
+        """
+        return self._raise_or_ok(super(EventbriteInterface, self).delete(f'/events/{event_id}'))
+
 if __name__ == '__main__':
     config = configparser.ConfigParser()
     config.read([
