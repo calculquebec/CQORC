@@ -54,7 +54,7 @@ def main():
     import configparser
     import os
     secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('GCAL_SECRETS') or '../secrets.cfg'
+    secrets_path = os.getenv('GCAL_SECRETS') or '../../secrets.cfg'
     secrets.read_file(open(secrets_path))
     secrets = secrets['gcal']
     gcal = GCalInterface(secrets['credentials_file'], secrets['calendar_id'])
