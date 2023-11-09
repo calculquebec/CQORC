@@ -7,10 +7,11 @@ class ZoomInterface:
     auth_token_url = "https://zoom.us/oauth/token"
     api_base_url = "https://api.zoom.us/v2"
 
-    def __init__(self, account_id, client_id, client_secret):
+    def __init__(self, account_id, client_id, client_secret, timezone = "America/Montreal"):
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
+        self.timezone = timezone
 
     def get_authorization_header(self):
         # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
@@ -48,7 +49,7 @@ class ZoomInterface:
             #"jbh_time": 5,
             #"join_before_host": "true",
             'start_time': f'{start_date}T{start_time}',
-            "timezone": "America/Montreal",
+            "timezone": self.timezone,
             "type": 2,
         }
 
@@ -109,14 +110,18 @@ class ZoomInterface:
 def main():
     import configparser
     import os
-    secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('ZOOM_SECRETS') or '../../secrets.cfg'
-    secrets.read_file(open(secrets_path))
-    secrets = secrets['zoom']
-    zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'])
-    print(str(zoom.get_authorization_header()))
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
 
-    print(str(zoom.create_meeting("Meeting test", "60", "2023-11-01", "13:00:00")))
+    secrets = config['zoom']
+    zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'], config['global']['timezone'])
+
+    print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
 
 if __name__ == "__main__":
     main()
