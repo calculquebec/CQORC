@@ -193,7 +193,7 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         HTML object representing the description
         """
-        return self._raise_or_ok(self.get(f'/events/{event_id}/description/')
+        return self._raise_or_ok(self.get(f'/events/{event_id}/description/'))
 
 if __name__ == '__main__':
     config = configparser.ConfigParser()
