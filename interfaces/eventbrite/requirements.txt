@@ -1,5 +1,0 @@
-eventbrite>=3.3.5
-beautifulsoup4
-requests>=2.28.2
-pyyaml
-GitPython
