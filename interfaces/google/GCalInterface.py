@@ -7,11 +7,11 @@ from GoogleInterface import GoogleInterface
 from googleapiclient.errors import HttpError
 
 class GCalInterface(GoogleInterface):
-    def __init__(self, key_file, calendar_id, credentials_type='user'):
+    def __init__(self, key_file, calendar_id, credentials_type='user', timezone = "America/Montreal"):
         super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events'])
         self.logger = logging.getLogger(__name__)
         self.calendar_id = calendar_id
-        self.timezone = "America/Montreal"
+        self.timezone = timezone
 
     def get_events(self, start_time, limit=10):
         try:
@@ -53,11 +53,20 @@ class GCalInterface(GoogleInterface):
 def main():
     import configparser
     import os
-    secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('GCAL_SECRETS') or '../../secrets.cfg'
-    secrets.read_file(open(secrets_path))
-    secrets = secrets['gcal']
-    gcal = GCalInterface(secrets['credentials_file'], secrets['calendar_id'])
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
+
+    # take the credentials file either from google.calendar or from google section
+    credentials_file = config['google.calendar'].get('credentials_file', config['google']['credentials_file'])
+    credentials_file_path = os.path.join(secrets_dir, credentials_file)
+
+    timezone = config['google.calendar'].get('timezone', config['global']['timezone'])
+    gcal = GCalInterface(credentials_file_path, config['google.calendar']['calendar_id'], timezone)
 
     # Call the Calendar API
     now_dt = datetime.datetime.utcnow()
