@@ -74,13 +74,20 @@ class GSheetsInterface(GoogleInterface):
 def main():
     import configparser
     import os
-    secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('GSHEETS_SECRETS') or '../../secrets.cfg'
-    secrets.read_file(open(secrets_path))
-    secrets = secrets['google.sheets']
-    gsheets = GSheetsInterface(secrets['credentials_file'])
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
+
+    # take the credentials file either from google.calendar or from google section
+    credentials_file = config['google.sheets'].get('credentials_file', config['google']['credentials_file'])
+    credentials_file_path = os.path.join(secrets_dir, credentials_file)
+    gsheets = GSheetsInterface(credentials_file_path)
     content = [['1', '2'], ['3', '4', '5', '8'], ['x']]
-    folder_id = "1xluiw761tnHq_khln7N5Jk-dBV59XJlB"
+    folder_id = config['script.usernames']['google_drive_folder_id']
     gsheets.create_spreadsheet("Ceci est un test", content, folder_id)
 
 
