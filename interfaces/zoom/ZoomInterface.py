@@ -110,7 +110,7 @@ def main():
     import configparser
     import os
     secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('ZOOM_SECRETS') or '../secrets.cfg'
+    secrets_path = os.getenv('ZOOM_SECRETS') or '../../secrets.cfg'
     secrets.read_file(open(secrets_path))
     secrets = secrets['zoom']
     zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'])
