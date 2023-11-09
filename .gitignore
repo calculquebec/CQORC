@@ -5,3 +5,4 @@ secrets.cfg
 *secret*.json
 *token*.json
 __pycache__
+secrets
