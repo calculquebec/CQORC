@@ -22,7 +22,7 @@ class GCalInterface(GoogleInterface):
             return events
 
         except HttpError as error:
-            print('An error occurred: %s' % error)
+            self.logger.error('An error occurred: %s' % error)
 
 
     def create_event(self, start_time, end_time, summary, description, attendees):
@@ -44,9 +44,9 @@ class GCalInterface(GoogleInterface):
                         calendarId=self.calendar_id,
                         body=event_dict
                         ).execute()
-            print("Event created: %s" % (event.get('htmlLink')))
+            self.logger.info("Event created: %s" % (event.get('htmlLink')))
         except HttpError as error:
-            print('An error occurred: %s' % error)
+            self.logger.error('An error occurred: %s' % error)
 
 
 
