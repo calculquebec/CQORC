@@ -206,7 +206,7 @@ if __name__ == '__main__':
     lang = 'fr'
 
     # Test get template event
-    fr_template = eb.get_event(config['templates'][f'{lang}_event_id'])
+    fr_template = eb.get_event(config['eventbrite.templates'][f'{lang}_event_id'])
 
     print(fr_template['name'])
     print('OK')
