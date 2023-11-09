@@ -197,7 +197,10 @@ class EventbriteInterface(eb.Eventbrite):
 
 if __name__ == '__main__':
     config = configparser.ConfigParser()
-    config.read([os.environ.get('EVENTBRITE_SECRETS', '../secrets.cfg'), 'eventbrite.cfg'])
+    config.read([
+            os.environ.get('EVENTBRITE_SECRETS', '../../secrets.cfg'),
+            os.environ.get('EVENTBRITE_CONFIG', '../../config.cfg'),
+    ])
 
     eb = EventbriteInterface(config['eventbrite']['api_key'])
     lang = 'fr'
