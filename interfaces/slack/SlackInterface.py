@@ -113,12 +113,16 @@ class SlackInterface:
 def main():
     import configparser
     import os
-    secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('SLACK_SECRETS') or '../../secrets.cfg'
-    secrets.read_file(open(secrets_path))
-    secrets = secrets['slack']
-    slack = SlackInterface(secrets['bot_token'])
-#    slack.create_channel("ceci-est-un-test")
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
+
+    slack = SlackInterface(config['slack']['bot_token'])
+    slack.create_channel("ceci-est-un-test")
     slack.invite_to_channel("ceci-est-un-test", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
 #    slack.create_reminder("maxime.boissonneault@calculquebec.ca", "ceci est un test", "in 2 minutes")
 
