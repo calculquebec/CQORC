@@ -114,7 +114,7 @@ def main():
     import configparser
     import os
     secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('SLACK_SECRETS') or '../secrets.cfg'
+    secrets_path = os.getenv('SLACK_SECRETS') or '../../secrets.cfg'
     secrets.read_file(open(secrets_path))
     secrets = secrets['slack']
     slack = SlackInterface(secrets['bot_token'])
