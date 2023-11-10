@@ -177,7 +177,7 @@ class EventbriteInterface(eb.Eventbrite):
 
         print(f'Successfully updated {event_id} ticket classes')
 
-    def get_event_desc(self, event_id):
+    def get_event_description(self, event_id):
         """
         Get the template event description section.
         Calls specific html endpoint, this contains the summary and the description in html.
