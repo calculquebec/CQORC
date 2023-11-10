@@ -207,11 +207,13 @@ class EventbriteInterface(eb.Eventbrite):
         return self._raise_or_ok(super(EventbriteInterface, self).delete(f'/events/{event_id}'))
 
 if __name__ == '__main__':
+    from glob import glob
+
     config = configparser.ConfigParser()
-    config.read([
-            os.environ.get('EVENTBRITE_SECRETS', '../../secrets.cfg'),
-            os.environ.get('EVENTBRITE_CONFIG', '../../config.cfg'),
-    ])
+    config.read(
+        glob(os.path.join(os.environ.get('CQORC_CONFIG_DIR', '.'), '*.cfg')) +
+        glob(os.path.join(os.environ.get('CQORC_SECRET_DIR', '.'), '*.cfg'))
+    )
 
     eb = EventbriteInterface(config['eventbrite']['api_key'])
     lang = 'fr'
