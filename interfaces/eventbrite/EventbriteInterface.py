@@ -21,7 +21,6 @@ class EventbriteInterface(eb.Eventbrite):
         super(EventbriteInterface, self).__init__(token)
         self.logger = logging.getLogger(__name__)
 
-    @functools.lru_cache
     def get_pages(self, url, key, **params):
         """
         Get all pages returned.
@@ -48,7 +47,6 @@ class EventbriteInterface(eb.Eventbrite):
             results = self.get(url, data={'continuation': results['pagination']['continuation']})
             yield results[key]
 
-    @functools.lru_cache
     def get_unpaginated(self, url, key, **params):
         """
         Flatten all returned pages into one collection.
@@ -62,7 +60,6 @@ class EventbriteInterface(eb.Eventbrite):
         """
         return itertools.chain.from_iterable(self.get_pages(url, key, **params))
 
-    @functools.lru_cache
     def get_events(self, organization_id, flattened=True, **params):
         """
         Get all events for an organization.
