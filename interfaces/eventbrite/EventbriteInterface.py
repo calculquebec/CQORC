@@ -149,28 +149,30 @@ class EventbriteInterface(eb.Eventbrite):
 
         return response["id"]
 
-    def update_tickets(self, event_id, close_prior=12):
+    def update_tickets(self, event_id, sales_start=None, sales_end=None):
         """
         Update tickets class.
 
         Parameters
         ----------
         event_id:    Event id to update
-        close_prior: Set sales end prior to (hours), default: 12
+        sales_start: Sales start date time, default None -> unchange
+        sales_end:   Sales end date time, default None -> end at event start time
 
         Returns
         -------
         None
         """
-        event = self._raise_or_ok(self.get_event(event_id))
-        start_date = self._to_iso8061(event['start']['local'])
+        event = eb.get_event(event_id)
+        sales_start = self._to_iso8061(sales_start).astimezone(timezone.utc).strftime(self.UTC_FMT) if sales_start else ""
+        sales_end = self._to_iso8061(sales_end if sales_end else event['start']['local']).astimezone(timezone.utc).strftime(self.UTC_FMT)
         ticket_classes_response = self._raise_or_ok(self.get(f"/events/{event_id}/ticket_classes/"))
 
         for ticket_class in ticket_classes_response['ticket_classes']:
             obj = {
                 "ticket_class": {
-                    "sales_start": "",
-                    "sales_end": (start_date - timedelta(hours=close_prior)).astimezone(timezone.utc).strftime(self.UTC_FMT)
+                    "sales_start": sales_start,
+                    "sales_end": sales_end
                 }
             }
             self._raise_or_ok(self.post(f"/events/{event_id}/ticket_classes/{ticket_class['id']}/", data=obj))
