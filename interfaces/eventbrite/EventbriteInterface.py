@@ -206,6 +206,79 @@ class EventbriteInterface(eb.Eventbrite):
         """
         return self._raise_or_ok(super(EventbriteInterface, self).delete(f'/events/{event_id}'))
 
+    def get_event_attendees(self, event_id):
+        """
+        Get the attendees for this event, in one list.
+        *Override eventbrite.get_event_attendees which is paginated.*
+
+        Parameters
+        ----------
+        event_id: Event id
+
+        Returns
+        -------
+        attendees
+        """
+        return self.get_unpaginated(f"/events/{event_id}/attendees/", key='attendees')
+
+    def get_event_attendees_by_status(self, event_id, status_filter=None):
+        """
+        Get attendees names for the event.
+        By default, returns all attendees names regardless of their status.
+
+        Parameters
+        ----------
+        event_id: Event id
+        status_filter: status to filter, default : None
+
+        Returns
+        -------
+        names: lazy list of attendees (generator).
+        """
+        attendees = self.get_event_attendees(event_id)
+
+        if status_filter:
+            lambda_filter = lambda x: x['status'].lower() in status_filter
+            attendees = filter(lambda_filter, attendees)
+
+        return attendees
+
+    def get_event_attendees_attending(self, event_id):
+        """
+        Get attendees that are attending, that is that have their status to `attending`.
+        Discard refunded, cancelled or transferred attendees.
+        *The full name only is returned.*
+
+        Parameters
+        ----------
+        event_id: Event id
+
+        Returns
+        -------
+        list of full names
+        """
+        attending_attendees = self.get_event_attendees_by_status(event_id, status_filter=('attending'))
+
+        return [attendee['profile']['name'] for attendee in attending_attendees]
+
+    def get_event_attendees_checked_in(self, event_id):
+        """
+        Get the attendees that participated, that is that have their status to `checked in` or `attended`.
+        *The name and email only are returned.*
+
+        Parameters
+        ----------
+        event_id: Event id
+
+        Returns
+        -------
+        dict of attendee name and email
+        """
+        attended_attendees = self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'))
+
+        return {attendee['profile']['name']: attendee['profile']['email'] for attendee in attended_attendees}
+
+
 if __name__ == '__main__':
     from glob import glob
 
