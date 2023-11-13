@@ -223,6 +223,33 @@ class EventbriteInterface(eb.Eventbrite):
         """
         return self.get_unpaginated(f"/events/{event_id}/attendees/", key='attendees')
 
+    def update_event_description(self, event_id, description):
+        """
+        Update the event description.
+        This does not contain the summary, only the description in html.
+
+        Parameters
+        ----------
+        event_id: Event id to update
+        description: Event HTML description
+
+        Returns
+        -------
+        None
+        """
+        obj = {
+            "modules": [{
+                "type": "text", "data": {"body": {"text": description, }}}
+            ],
+            "publish": "true",
+            "purpose": "listing"
+        }
+
+        get_structed_content = self._raise_or_ok(self.get(f"/events/{event_id}/structured_content/"))
+        version = int(get_structed_content["page_version_number"])
+
+        return self._raise_or_ok(self.post(f"/events/{event_id}/structured_content/{version+1}/", data=obj))
+
     def get_event_attendees_by_status(self, event_id, status_filter=None):
         """
         Get attendees names for the event.
