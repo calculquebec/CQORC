@@ -1,0 +1,129 @@
+#!/usr/bin/env python3
+
+import requests
+
+class ZoomInterface:
+    # constants
+    auth_token_url = "https://zoom.us/oauth/token"
+    api_base_url = "https://api.zoom.us/v2"
+
+    def __init__(self, account_id, client_id, client_secret, timezone = "America/Montreal"):
+        self.account_id = account_id
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.timezone = timezone
+
+    def get_authorization_header(self):
+        # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
+        data = {
+            "grant_type": "account_credentials",
+            "account_id": self.account_id,
+            "client_secret": self.client_secret
+        }
+        response = requests.post(self.auth_token_url,
+                                 auth=(self.client_id, self.client_secret),
+                                 data=data)
+
+        if response.status_code!=200:
+            print("Unable to get access token")
+        response_data = response.json()
+        access_token = response_data["access_token"]
+
+        headers = {
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json"
+        }
+
+        return headers
+
+    def create_meeting(self, topic, duration, start_date, start_time):
+        headers = self.get_authorization_header()
+
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetingCreate
+        payload = {
+            "topic": topic,
+            #"schedule_for": "user@a",
+            #"alternative_hosts": "a,b,c,d",
+            "duration": duration,
+            #"host_video": true,
+            #"jbh_time": 5,
+            #"join_before_host": "true",
+            'start_time': f'{start_date}T{start_time}',
+            "timezone": self.timezone,
+            "type": 2,
+        }
+
+        resp = requests.post(f"{self.api_base_url}/users/me/meetings",
+                             headers=headers,
+                             json=payload)
+
+        if resp.status_code!=201:
+            print("Unable to generate meeting link")
+        response_data = resp.json()
+
+        content = {
+                    "meeting_url": response_data["join_url"],
+                    "password": response_data["password"],
+                    "meetingTime": response_data["start_time"],
+                    "purpose": response_data["topic"],
+                    "duration": response_data["duration"],
+                    "message": "Success",
+                    "status":1
+        }
+        return content
+
+    def list_meetings(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetings
+        pass
+
+    def get_meeting_participants(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportMeetingParticipants
+        pass
+
+    def create_webinar(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarCreate
+        pass
+
+    def add_panelist(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarPanelistCreate
+        pass
+
+    def list_webinars(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
+        pass
+
+    def update_webinar(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarUpdate
+        pass
+
+    def get_webinar_participants(self):
+        # to be done
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportWebinarParticipants
+        pass
+
+def main():
+    import configparser
+    import os
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
+
+    secrets = config['zoom']
+    zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'], config['global']['timezone'])
+
+    print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
+
+if __name__ == "__main__":
+    main()
+
+
