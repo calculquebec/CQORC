@@ -2,10 +2,9 @@ import eventbrite as eb
 from requests.models import PreparedRequest
 import os
 import itertools
-import functools
 import configparser
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 
 class EventbriteInterface(eb.Eventbrite):
@@ -37,7 +36,7 @@ class EventbriteInterface(eb.Eventbrite):
             # to be compatible with Eventbrite API requests.
             prefix = "http:/"
             req = PreparedRequest()
-            req.prepare_url(prefix+url, params)
+            req.prepare_url(prefix + url, params)
             url = req.url[len(prefix):]
 
         results = self.get(url)
@@ -272,7 +271,7 @@ class EventbriteInterface(eb.Eventbrite):
 
         return attendees
 
-    def get_event_attendees_attending(self, event_id):
+    def get_event_attendees_registered(self, event_id):
         """
         Get attendees that are attending, that is that have their status to `attending`.
         Discard refunded, cancelled or transferred attendees.
@@ -290,7 +289,7 @@ class EventbriteInterface(eb.Eventbrite):
 
         return [attendee['profile']['name'] for attendee in attending_attendees]
 
-    def get_event_attendees_checked_in(self, event_id):
+    def get_event_attendees_present(self, event_id):
         """
         Get the attendees that participated, that is that have their status to `checked in` or `attended`.
         *The name and email only are returned.*
