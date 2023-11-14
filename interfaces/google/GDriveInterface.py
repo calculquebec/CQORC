@@ -3,7 +3,10 @@ import datetime
 import logging
 import os
 
-from GoogleInterface import GoogleInterface
+try:
+    from interfaces.google.GoogleInterface import GoogleInterface
+except:
+    from GoogleInterface import GoogleInterface
 from googleapiclient.errors import HttpError
 
 class GDriveInterface(GoogleInterface):

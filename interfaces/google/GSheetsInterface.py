@@ -3,8 +3,13 @@ import datetime
 import logging
 import os
 
-from GoogleInterface import GoogleInterface
-from GDriveInterface import GDriveInterface
+try:
+    from interfaces.google.GoogleInterface import GoogleInterface
+    from interfaces.google.GDriveInterface import GDriveInterface
+except:
+    from GoogleInterface import GoogleInterface
+    from GDriveInterface import GDriveInterface
+
 from googleapiclient.errors import HttpError
 
 class GSheetsInterface(GoogleInterface):
