@@ -1,6 +1,6 @@
 #!/bin/env python3
 
-import os, argparse, glob, configparser
+import os, argparse, glob, configparser, datetime
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.google.GDriveInterface as GDriveInterface
@@ -9,8 +9,9 @@ import interfaces.google.GSheetsInterface as GSheetsInterface
 from common import valid_date, to_iso8061, ISO_8061_FORMAT
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--event_id", default="next", help="EventBrite event id")
-parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Event date in ISO 8601.")
+parser.add_argument("--event_id", help="EventBrite event id")
+parser.add_argument("--next", default=False, action='store_true', help="Generate for the next event after now")
+parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
 parser.add_argument("--url", required=True, help="URL to access the cluster")
 parser.add_argument("--course_code", required=True, help="Code for the course (i.e. HPC101)")
 parser.add_argument("--password", required=True, help="Password to access the cluster")
@@ -37,17 +38,22 @@ gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(config['eventbrite']['api_key'])
 
-# retrieve list of attendees
-attendees = None
+# retrieve event from EventBrite
 if args.event_id:
-    attendees = eb.get_event_attendees_registered(args.event_id)
     event = eb.get_event(args.event_id)
 else:
-    events = eb.get_events(config['eventbrite']['organization_id'], time_filter="current_future", flattened=True, order_by="start_asc")
-    for event in events:
-        print(str(dict(event)))
-    print("Logique sans événement n'est pas déterminée")
-    exit(1)
+    events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="current_future", flattened=True, order_by="start_asc")
+    for e in events:
+        if args.next and to_iso8061(e['start']['local']) > to_iso8061(datetime.datetime.now()):
+            event = e
+            break
+        elif args.date and  to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
+            event = e
+            break
+
+# retrieve list of attendees
+attendees = None
+attendees = eb.get_event_attendees_registered(event['id'])
 
 date = to_iso8061(event["start"]["local"]).date()
 locale = event["locale"].split('_')[0]
