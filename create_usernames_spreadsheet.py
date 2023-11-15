@@ -1,12 +1,12 @@
 #!/bin/env python3
 
-import os, argparse, glob, configparser, datetime
+import os, argparse, datetime
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.google.GDriveInterface as GDriveInterface
 import interfaces.google.GSheetsInterface as GSheetsInterface
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--event_id", help="EventBrite event id")
@@ -20,15 +20,12 @@ parser.add_argument("--secrets_dir", default=".", help="Directory that holds the
 parser.add_argument("--create_template_file", default=False, action='store_true', help="Create a spreadsheet to act as template file")
 args = parser.parse_args()
 
-global_config = configparser.ConfigParser()
-config_dir = os.environ.get('CQORC_CONFIG_DIR', args.config_dir)
-secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
-config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
-global_config.read(config_files)
-
+# read configuration files
+global_config = get_config(args)
 
 # take the credentials file either from google.sheets or from google section
 credentials_file = global_config['google']['credentials_file']
+secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
 credentials_file_path = os.path.join(secrets_dir, credentials_file)
 # initialize the Google Drive interface
 gdrive = GDriveInterface.GDriveInterface(credentials_file_path)
