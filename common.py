@@ -28,4 +28,5 @@ def get_config(args):
     secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
     config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
     global_config.read(config_files)
+    return global_config
 
