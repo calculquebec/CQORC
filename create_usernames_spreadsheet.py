@@ -20,23 +20,23 @@ parser.add_argument("--secrets_dir", default=".", help="Directory that holds the
 
 args = parser.parse_args()
 
-config = configparser.ConfigParser()
+global_config = configparser.ConfigParser()
 config_dir = os.environ.get('CQORC_CONFIG_DIR', args.config_dir)
 secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
 config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
 print("Reading config files: %s" % str(config_files))
-config.read(config_files)
+global_config.read(config_files)
 
 
 # take the credentials file either from google.sheets or from google section
-credentials_file = config['google']['credentials_file']
+credentials_file = global_config['google']['credentials_file']
 credentials_file_path = os.path.join(secrets_dir, credentials_file)
 # initialize the Google Drive interface
 gdrive = GDriveInterface.GDriveInterface(credentials_file_path)
 gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
 
 # initialize EventBrite interface:
-eb = Eventbrite.EventbriteInterface(config['eventbrite']['api_key'])
+eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 
 # retrieve event from EventBrite
 if args.event_id:
@@ -55,14 +55,16 @@ else:
 attendees = None
 attendees = eb.get_event_attendees_registered(event['id'])
 
+# this script's config
+config = global_config['script.usernames']
 date = to_iso8061(event["start"]["local"]).date()
 locale = event["locale"].split('_')[0]
-title = config['script.usernames'].get("title_%s" % locale, config['script.usernames']['template_en'])
+title = config.get("title_%s" % locale, config['template_en'])
 new_file_name = f"{date} - {args.course_code} - {title}"
 
 # create the spreadsheet
-source_file_id = config['script.usernames'].get("template_%s" % locale, config['script.usernames']["template_en"])
-new_file = gdrive.copy_file(source_file_id, new_file_name, config['script.usernames']['google_drive_folder_id'])
+source_file_id = config.get("template_%s" % locale, config["template_en"])
+new_file = gdrive.copy_file(source_file_id, new_file_name, config['google_drive_folder_id'])
 sheet_id = new_file['id']
 
 # update the spreadsheet
