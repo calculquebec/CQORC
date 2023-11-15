@@ -17,7 +17,7 @@ parser.add_argument("--password", help="Password to access the cluster")
 parser.add_argument("--url", help="URL to access the cluster")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-
+parser.add_argument("--create_template_file", default=False, action='store_true', help="Create a spreadsheet to act as template file")
 args = parser.parse_args()
 
 global_config = configparser.ConfigParser()
@@ -35,9 +35,15 @@ credentials_file_path = os.path.join(secrets_dir, credentials_file)
 gdrive = GDriveInterface.GDriveInterface(credentials_file_path)
 gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
 
+# this script's config
+config = global_config['script.usernames']
+if args.create_template_file:
+    sheet = gsheets.create_spreadsheet("Template", [[]], config['google_drive_folder_id'])
+    print("Template created: %s" % gdrive.get_file_url(sheet))
+    exit(0)
+
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
-
 # retrieve event from EventBrite
 if args.event_id:
     event = eb.get_event(args.event_id)
@@ -55,8 +61,6 @@ else:
 attendees = None
 attendees = eb.get_event_attendees_registered(event['id'])
 
-# this script's config
-config = global_config['script.usernames']
 date = to_iso8061(event["start"]["local"]).date()
 title = event["name"]["text"]
 locale = event["locale"].split('_')[0]
@@ -93,4 +97,6 @@ gsheets.update_values(sheet_id, header_range, header)
 data = [[eval('f' + repr(config['username_template'])), attendee] for user_index, attendee in enumerate(attendees)]
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
+
+print("URL: %s" % gdrive.get_file_url(new_file['id']))
 
