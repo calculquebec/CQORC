@@ -24,7 +24,6 @@ global_config = configparser.ConfigParser()
 config_dir = os.environ.get('CQORC_CONFIG_DIR', args.config_dir)
 secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
 config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
-print("Reading config files: %s" % str(config_files))
 global_config.read(config_files)
 
 
