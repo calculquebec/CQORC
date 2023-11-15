@@ -12,7 +12,7 @@ from googleapiclient.errors import HttpError
 class GDriveInterface(GoogleInterface):
     def __init__(self, key_file, credentials_type='user'):
         # liste des scopes https://developers.google.com/identity/protocols/oauth2/scopes#drive
-        super(GDriveInterface, self).__init__(key_file, credentials_type, 'drive', 'v3', ['https://www.googleapis.com/auth/drive'])
+        super(GDriveInterface, self).__init__(key_file, credentials_type, 'drive', 'v3', ['https://www.googleapis.com/auth/drive.file'])
         self.logger = logging.getLogger(__name__)
 
 
@@ -53,6 +53,21 @@ class GDriveInterface(GoogleInterface):
         except HttpError as error:
             self.logger.error(f"An error occurred: {error}")
             return None
+
+
+    def get_file(self, file_id, fields):
+        # https://developers.google.com/drive/api/reference/rest/v3/files/get
+        try:
+            file = self.get_service().files().get(fileId=file_id, fields=fields, supportsAllDrives=True).execute()
+            return file
+
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return None
+
+
+    def get_file_url(self, file_id):
+        return self.get_file(file_id, "webViewLink")["webViewLink"]
 
 
 def main():
