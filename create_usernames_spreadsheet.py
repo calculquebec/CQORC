@@ -12,9 +12,9 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--event_id", help="EventBrite event id")
 parser.add_argument("--next", default=False, action='store_true', help="Generate for the next event after now")
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
-parser.add_argument("--url", required=True, help="URL to access the cluster")
-parser.add_argument("--course_code", required=True, help="Code for the course (i.e. HPC101)")
-parser.add_argument("--password", required=True, help="Password to access the cluster")
+parser.add_argument("--course_code", help="Code for the course (i.e. HPC101)")
+parser.add_argument("--password", help="Password to access the cluster")
+parser.add_argument("--url", help="URL to access the cluster")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
 
@@ -58,9 +58,27 @@ attendees = eb.get_event_attendees_registered(event['id'])
 # this script's config
 config = global_config['script.usernames']
 date = to_iso8061(event["start"]["local"]).date()
+title = event["name"]["text"]
 locale = event["locale"].split('_')[0]
-title = config.get("title_%s" % locale, config['template_en'])
-new_file_name = f"{date} - {args.course_code} - {title}"
+
+if args.course_code:
+    course_code = args.course_code
+else:
+    course_code = eval('f' + repr(config['course_code_template']))
+
+if args.url:
+    url = args.url
+elif 'url_template' in config:
+    url = eval('f' + repr(config['url_template']))
+
+if args.password:
+    password = args.password
+elif 'password_template' in config:
+    password = eval('f' + repr(config['password_template']))
+
+# load the template for filename, based on the locale
+filename_template = config.get(f"filename_template_{locale}", config.get('filename_template_en'))
+new_file_name = eval('f' + repr(filename_template))
 
 # create the spreadsheet
 source_file_id = config.get("template_%s" % locale, config["template_en"])
@@ -68,9 +86,11 @@ new_file = gdrive.copy_file(source_file_id, new_file_name, config['google_drive_
 sheet_id = new_file['id']
 
 # update the spreadsheet
-header = [[args.url], [args.password]]
-gsheets.update_values(sheet_id, "B1:B2", header)
+header = [[url], [password]]
+header_range = config['header_range']
+gsheets.update_values(sheet_id, header_range, header)
 
-data = [["user{:02d}".format(i+1), attendee] for i, attendee in enumerate(attendees)]
-gsheets.update_values(sheet_id, "A5:B", data)
+data = [[eval('f' + repr(config['username_template'])), attendee] for user_index, attendee in enumerate(attendees)]
+data_range = config['data_range']
+gsheets.update_values(sheet_id, data_range, data)
 
