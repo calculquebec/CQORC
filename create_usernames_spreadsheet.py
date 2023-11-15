@@ -58,7 +58,6 @@ else:
             break
 
 # retrieve list of attendees
-attendees = None
 attendees = eb.get_event_attendees_registered(event['id'])
 
 date = to_iso8061(event["start"]["local"]).date()
