@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 
 import requests
+from datetime import datetime
 
 class ZoomInterface:
     # constants
     auth_token_url = "https://zoom.us/oauth/token"
     api_base_url = "https://api.zoom.us/v2"
 
-    def __init__(self, account_id, client_id, client_secret, timezone = "America/Montreal"):
+    def __init__(self, account_id, client_id, client_secret, timezone = "America/Montreal", user = "me"):
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
         self.timezone = timezone
+        self.user = user
 
     def get_authorization_header(self):
         # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
@@ -53,7 +55,7 @@ class ZoomInterface:
             "type": 2,
         }
 
-        resp = requests.post(f"{self.api_base_url}/users/me/meetings",
+        resp = requests.post(f"{self.api_base_url}/users/{self.user}/meetings",
                              headers=headers,
                              json=payload)
 
@@ -92,20 +94,61 @@ class ZoomInterface:
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarPanelistCreate
         pass
 
-    def list_webinars(self):
-        # to be done
+
+    def get_webinars(self, date = None, ids = None, next_page_token = None):
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
-        pass
+        headers = self.get_authorization_header()
+        payload = {
+            "type": "scheduled",
+            "page_size": "300",
+        }
+        if next_page_token:
+            payload['next_page_token'] = next_page_token
+
+        resp = requests.get(f"{self.api_base_url}/users/{self.user}/webinars",
+                             headers=headers,
+                             params=payload)
+
+        response = resp.json()
+        all_webinars = response.get('webinars', None)
+        # get next pages if there is any
+        if response.get('next_page_token', None):
+            all_webinars += self.get_webinars(response['next_page_token'])
+
+        if date:
+            webinars = [w for w in all_webinars if datetime.fromisoformat(w['start_time']).date() == date]
+        if ids:
+            webinars = [w for w in all_webinars if w['id'] in ids]
+        return webinars
+
 
     def update_webinar(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarUpdate
         pass
 
-    def get_webinar_participants(self):
-        # to be done
+
+    def get_webinar_participants(self, webinarId, next_page_token = None):
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportWebinarParticipants
-        pass
+        headers = self.get_authorization_header()
+        payload = {
+            "page_size": "300",
+        }
+        if next_page_token:
+            payload['next_page_token'] = next_page_token
+
+        resp = requests.get(f"{self.api_base_url}/report/webinars/{webinarId}/participants",
+                             headers=headers,
+                             params=payload)
+
+        response = resp.json()
+        all_participants = response.get('participants', None)
+        # get next pages if there is any
+        if response.get('next_page_token', None):
+            all_participants += self.get_webinar_participants(webinarId, response['next_page_token'])
+
+        return all_participants
+
 
 def main():
     import configparser
