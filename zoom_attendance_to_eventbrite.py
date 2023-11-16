@@ -54,7 +54,7 @@ event = None
 if args.eventbrite_id:
     event = eb.get_event(args.eventbrite_id)
 else:
-    events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_asc")
+    events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
     for e in events:
         if args.date and to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
             event = e
