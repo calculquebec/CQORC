@@ -3,7 +3,10 @@ import datetime
 import logging
 import os
 
-from GoogleInterface import GoogleInterface
+try:
+    from interfaces.google.GoogleInterface import GoogleInterface
+except:
+    from GoogleInterface import GoogleInterface
 from googleapiclient.errors import HttpError
 
 class GDriveInterface(GoogleInterface):
@@ -39,15 +42,51 @@ class GDriveInterface(GoogleInterface):
             return None
 
 
+    def copy_file(self, original_id, newtitle, parent_folder_id):
+        # https://developers.google.com/drive/api/reference/rest/v3/files/copy
+        try:
+            # Retrieve the existing parents to remove
+            newfile = {'name': newtitle, 'parents': [ {"id": parent_folder_id } ] }
+            file = self.get_service().files().copy(fileId=original_id, body=newfile, supportsAllDrives=True).execute()
+            return file
+
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return None
+
+
+    def get_file(self, file_id, fields):
+        # https://developers.google.com/drive/api/reference/rest/v3/files/get
+        try:
+            file = self.get_service().files().get(fileId=file_id, fields=fields, supportsAllDrives=True).execute()
+            return file
+
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return None
+
+
+    def get_file_url(self, file_id):
+        return self.get_file(file_id, "webViewLink")["webViewLink"]
+
+
 def main():
     import configparser
     import os
-    secrets = configparser.ConfigParser()
-    secrets_path = os.getenv('GDRIVE_SECRETS') or '../../secrets.cfg'
-    secrets.read_file(open(secrets_path))
-    secrets = secrets['google.drive']
-    gdrive = GDriveInterface(secrets['credentials_file'])
+    import glob
+    config = configparser.ConfigParser()
+    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
+    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    print("Reading config files: %s" % str(config_files))
+    config.read(config_files)
 
+    # take the credentials file either from google.calendar or from google section
+    credentials_file = config['google']['credentials_file']
+    credentials_file_path = os.path.join(secrets_dir, credentials_file)
+    gdrive = GDriveInterface(credentials_file_path)
+#    source_file_id = "1eURwPuPMDkL2C0R7ZD4e6qHLl8DNaGxtwYLgsfZ79Ec"
+#    gdrive.copy_file(source_file_id, "Ceci est un test", "1xluiw761tnHq_khln7N5Jk-dBV59XJlB")
 
 if __name__ == "__main__":
     main()
