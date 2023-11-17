@@ -91,6 +91,11 @@ print("\nThe following people attended the Zoom event, but are not in EventBrite
 for email in missing_in_eb:
     if email not in eb_registrants:
         print(f"{email}: {zoom_participants[email]['name']}")
+# remove filtered domains from missing_in_eb
+ignored_email_domains = global_config['script.presence']['ignored_email_domains']
+for domain in ignored_email_domains:
+    missing_in_eb = [email for email in missing_in_eb if domain not in email]
+
 
 print("\nThe following people attended the Zoom event, but are not checked in in EventBrite")
 for email in missing_in_eb:
