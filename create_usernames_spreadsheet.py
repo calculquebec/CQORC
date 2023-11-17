@@ -7,6 +7,7 @@ import interfaces.google.GDriveInterface as GDriveInterface
 import interfaces.google.GSheetsInterface as GSheetsInterface
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
+from common import extract_course_code_from_title
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--event_id", help="EventBrite event id")
@@ -54,7 +55,7 @@ else:
             break
 
 # retrieve list of attendees
-attendees = eb.get_event_attendees_registered(event['id'])
+attendees = eb.get_event_attendees_registered(event['id'], fields = ['email', 'name'])
 
 date = to_iso8061(event["start"]["local"]).date()
 title = event["name"]["text"]
@@ -63,7 +64,7 @@ locale = event["locale"].split('_')[0]
 if args.course_code:
     course_code = args.course_code
 else:
-    course_code = eval('f' + repr(config['course_code_template']))
+    course_code = extract_course_code_from_title(global_config, title)
 
 if args.url:
     url = args.url
@@ -89,7 +90,7 @@ header = [[url], [password]]
 header_range = config['header_range']
 gsheets.update_values(sheet_id, header_range, header)
 
-data = [[eval('f' + repr(config['username_template'])), attendee] for user_index, attendee in enumerate(attendees)]
+data = [[eval('f' + repr(config['username_template'])), attendee['name']] for user_index, attendee in enumerate(attendees.values())]
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
 
