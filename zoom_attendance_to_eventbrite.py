@@ -46,7 +46,6 @@ max_duration = max([v['duration'] for k,v in zoom_participants.items()])
 # keep only attendees which have attended for more than a threshold
 threshold = float(global_config['script.presence']['presence_threshold'])
 zoom_participants = {k: v for k,v in zoom_participants.items() if v['duration'] > threshold * max_duration}
-zoom_attendees_email = zoom_participants.keys()
 
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
