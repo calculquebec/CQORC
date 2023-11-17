@@ -30,3 +30,6 @@ def get_config(args):
     global_config.read(config_files)
     return global_config
 
+def extract_course_code_from_title(config, title):
+    return eval('f' + repr(config['global']['course_code_template']))
+
