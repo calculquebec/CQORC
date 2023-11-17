@@ -307,10 +307,10 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        return self.get_event_attendees_by_status(event_id, status_filter=('attending'), fields)
+        return self.get_event_attendees_by_status(event_id, status_filter=('attending'), fields=fields)
 
 
-    def get_event_attendees_present(self, event_id, fields):
+    def get_event_attendees_present(self, event_id, fields = None):
         """
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
 
@@ -323,7 +323,7 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        return self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'), fields)
+        return self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'), fields=fields)
 
 if __name__ == '__main__':
     from glob import glob
