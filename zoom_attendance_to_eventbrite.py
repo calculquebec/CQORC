@@ -81,8 +81,8 @@ for index, email in enumerate(missing_in_eb):
     name = zoom_participants[email]['name']
     # find if a registrant has the same name
     eb_email = [k for k,v in eb_registrants.items() if v['name'] == name]
-    # if one email is found, replace the email for the eb_email
-    if len(eb_email) == 1:
+    # if one email is found and is different from the one in zoom, replace the email for the eb_email
+    if len(eb_email) == 1 and eb_email[0] != email:
         message += f"{name} used email {email} in Zoom, but {eb_email[0]} in EventBrite, replacing\n"
         if eb_email[0] not in eb_attendees.keys():
             missing_in_eb[index] = eb_email[0]
@@ -93,7 +93,7 @@ for index, email in enumerate(missing_in_eb):
             should_not_in_eb.remove(eb_email[0])
 
 # remove filtered domains from missing_in_eb
-ignored_email_domains = global_config['script.presence']['ignored_email_domains']
+ignored_email_domains = global_config['script.presence']['ignored_email_domains'].split(',')
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
