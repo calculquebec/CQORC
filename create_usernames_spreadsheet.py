@@ -55,7 +55,7 @@ else:
             break
 
 # retrieve list of attendees
-attendees = eb.get_event_attendees_registered(event['id'])
+attendees = eb.get_event_attendees_registered(event['id'], fields = ['email', 'name'])
 
 date = to_iso8061(event["start"]["local"]).date()
 title = event["name"]["text"]
@@ -90,7 +90,7 @@ header = [[url], [password]]
 header_range = config['header_range']
 gsheets.update_values(sheet_id, header_range, header)
 
-data = [[eval('f' + repr(config['username_template'])), attendee] for user_index, attendee in enumerate(attendees)]
+data = [[eval('f' + repr(config['username_template'])), attendee['name']] for user_index, attendee in enumerate(attendees.values())]
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
 
