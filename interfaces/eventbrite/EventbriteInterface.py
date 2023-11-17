@@ -249,19 +249,20 @@ class EventbriteInterface(eb.Eventbrite):
 
         return self._raise_or_ok(self.post(f"/events/{event_id}/structured_content/{version+1}/", data=obj))
 
-    def get_event_attendees_by_status(self, event_id, status_filter=None):
+    def get_event_attendees_by_status(self, event_id, status_filter=None, fields = None):
         """
-        Get attendees names for the event.
-        By default, returns all attendees names regardless of their status.
+        Get attendees information for the event.
+        By default, returns information for all attendees regardless of their status.
 
         Parameters
         ----------
         event_id: Event id
         status_filter: status to filter, default : None
+        fields: name of the fields to keep in the information returned
 
         Returns
         -------
-        names: lazy list of attendees (generator).
+        attendees: a dictionary mapping email addresses the attendee information
         """
         attendees = self.get_event_attendees(event_id)
 
@@ -269,13 +270,33 @@ class EventbriteInterface(eb.Eventbrite):
             lambda_filter = lambda x: x['status'].lower() in status_filter
             attendees = filter(lambda_filter, attendees)
 
+        # transform into a dictionary
+        attendees = {attendee['profile']['email']: attendee for attendee in attendees}
+
+        # keep only fields requested
+        if fields:
+            filtered_view = {}
+            for email, info in attendees.items():
+                filtered_info = {}
+                for field in fields:
+                    # check if the field is in the root level
+                    if field in info:
+                        filtered_info[field] = info[field]
+                    # flatten if it is part of a sub dictionary
+                    else:
+                        for subdict in info.keys():
+                            if isinstance(info[subdict], dict) and field in info[subdict]:
+                                filtered_info[field] = info[subdict][field]
+                filtered_view[email] = filtered_info
+            attendees = filtered_view
+
         return attendees
 
-    def get_event_attendees_registered(self, event_id):
+
+    def get_event_attendees_registered(self, event_id, fields = None):
         """
-        Get attendees that are attending, that is that have their status to `attending`.
+        Get information for attendees that are attending, that is that have their status to `attending`.
         Discard refunded, cancelled or transferred attendees.
-        *The full name only is returned.*
 
         Parameters
         ----------
@@ -283,16 +304,14 @@ class EventbriteInterface(eb.Eventbrite):
 
         Returns
         -------
-        list of full names
+        attendees: a dictionary mapping email addresses the attendee information
         """
-        attending_attendees = self.get_event_attendees_by_status(event_id, status_filter=('attending'))
+        return self.get_event_attendees_by_status(event_id, status_filter=('attending'))
 
-        return [attendee['profile']['name'] for attendee in attending_attendees]
 
     def get_event_attendees_present(self, event_id):
         """
-        Get the attendees that participated, that is that have their status to `checked in` or `attended`.
-        *The name and email only are returned.*
+        Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
 
         Parameters
         ----------
@@ -300,12 +319,9 @@ class EventbriteInterface(eb.Eventbrite):
 
         Returns
         -------
-        dict of attendee name and email
+        attendees: a dictionary mapping email addresses the attendee information
         """
-        attended_attendees = self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'))
-
-        return {attendee['profile']['name']: attendee['profile']['email'] for attendee in attended_attendees}
-
+        return self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'))
 
 if __name__ == '__main__':
     from glob import glob
