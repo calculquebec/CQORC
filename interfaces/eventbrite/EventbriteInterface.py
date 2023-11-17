@@ -301,27 +301,29 @@ class EventbriteInterface(eb.Eventbrite):
         Parameters
         ----------
         event_id: Event id
+        fields: name of the fields to keep in the information returned
 
         Returns
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        return self.get_event_attendees_by_status(event_id, status_filter=('attending'))
+        return self.get_event_attendees_by_status(event_id, status_filter=('attending'), fields)
 
 
-    def get_event_attendees_present(self, event_id):
+    def get_event_attendees_present(self, event_id, fields):
         """
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
 
         Parameters
         ----------
         event_id: Event id
+        fields: name of the fields to keep in the information returned
 
         Returns
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        return self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'))
+        return self.get_event_attendees_by_status(event_id, status_filter=('checked in', 'attended'), fields)
 
 if __name__ == '__main__':
     from glob import glob
