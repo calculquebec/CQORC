@@ -34,6 +34,8 @@ if len(webinars) != 1:
 # get the list of participants to the webinar
 webinar = webinars[0]
 participants = zoom.get_webinar_participants(webinar['id'])
+zoom_participants_dict = {p['user_email']: p for p in participants}
+
 attendance_duration = {}
 # calculating the total attendance duration for each attendee
 for p in participants:
@@ -45,7 +47,7 @@ max_duration = attendance_duration[email_max_duration]
 
 # keep only attendees which have attended for more than a threshold
 threshold = float(global_config['script.presence']['presence_threshold'])
-attendees = [email for email in attendance_duration.keys() if attendance_duration[email] > threshold * max_duration]
+zoom_attendees_email = [email for email in attendance_duration.keys() if attendance_duration[email] > threshold * max_duration]
 
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
@@ -64,8 +66,27 @@ if not event:
     print("Error, no EventBrite event found")
     exit(1)
 
-registrants = eb.get_event_attendees_by_status(event['id'])
-for r in registrants:
-    print(str(r))
-#print(str(registrants))
+eb_registrants = eb.get_event_attendees_by_status(event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
+eb_checked_in_emails = [email for email in eb_registrants if eb_registrants[email]['status'] == 'Checked In']
+
+missing_in_eb = [email for email in zoom_attendees_email if email not in eb_checked_in_emails]
+should_not_in_eb = [email for email in eb_checked_in_emails if email not in zoom_attendees_email]
+
+print("The following people attended the Zoom event, but are not in EventBrite")
+for email in missing_in_eb:
+    if email not in eb_registrants:
+        print(f"{email}: {zoom_participants_dict[email]['name']}")
+
+print("The following people attended the Zoom event, but are not checked in in EventBrite")
+for email in missing_in_eb:
+    if email in eb_registrants:
+        print(f"{eb_registrants[email]['name']}: {email}")
+
+print("The following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom")
+for email in should_not_in_eb:
+    if email in eb_registrants:
+        print(f"{eb_registrants[email]['name']}: {email}")
+
+
+
 
