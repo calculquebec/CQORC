@@ -7,6 +7,7 @@ import interfaces.google.GDriveInterface as GDriveInterface
 import interfaces.google.GSheetsInterface as GSheetsInterface
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
+from common import extract_course_code_from_title
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--event_id", help="EventBrite event id")
@@ -63,7 +64,7 @@ locale = event["locale"].split('_')[0]
 if args.course_code:
     course_code = args.course_code
 else:
-    course_code = eval('f' + repr(config['course_code_template']))
+    course_code = extract_course_code_from_title(global_config, title)
 
 if args.url:
     url = args.url
