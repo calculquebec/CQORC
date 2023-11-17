@@ -3,8 +3,10 @@ import os, argparse, datetime
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.zoom.ZoomInterface as ZoomInterface
+import interfaces.slack.SlackInterface as SlackInterface
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
+from common import extract_course_code_from_title
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
@@ -50,26 +52,29 @@ zoom_participants = {k: v for k,v in zoom_participants.items() if v['duration'] 
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 # retrieve event from EventBrite
-event = None
+eb_event = None
 if args.eventbrite_id:
-    event = eb.get_event(args.eventbrite_id)
+    eb_event = eb.get_event(args.eventbrite_id)
 else:
-    events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
-    for e in events:
+    eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
+    for e in eb_events:
         if args.date and to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
-            event = e
+            eb_event = e
             break
 
-if not event:
+if not eb_event:
     print("Error, no EventBrite event found")
     exit(1)
 
-eb_registrants = eb.get_event_attendees_by_status(event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
-eb_attendees = eb.get_event_attendees_present(event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
+eb_registrants = eb.get_event_attendees_by_status(eb_event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
+eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
 
 # match by email
 missing_in_eb = [email for email in zoom_participants.keys() if email not in eb_attendees.keys()]
 should_not_in_eb = [email for email in eb_attendees.keys() if email not in zoom_participants.keys()]
+
+
+message = ""
 
 # match by name, emails in zoom but not EventBrite
 for index, email in enumerate(missing_in_eb):
@@ -78,7 +83,7 @@ for index, email in enumerate(missing_in_eb):
     eb_email = [k for k,v in eb_registrants.items() if v['name'] == name]
     # if one email is found, replace the email for the eb_email
     if len(eb_email) == 1:
-        print(f"{name} used email {email} in Zoom, but {eb_email[0]} in EventBrite, replacing")
+        message += f"{name} used email {email} in Zoom, but {eb_email[0]} in EventBrite, replacing\n"
         if eb_email[0] not in eb_attendees.keys():
             missing_in_eb[index] = eb_email[0]
         else:
@@ -87,26 +92,47 @@ for index, email in enumerate(missing_in_eb):
         if eb_email[0] in should_not_in_eb:
             should_not_in_eb.remove(eb_email[0])
 
-print("\nThe following people attended the Zoom event, but are not in EventBrite")
-for email in missing_in_eb:
-    if email not in eb_registrants:
-        print(f"{email}: {zoom_participants[email]['name']}")
 # remove filtered domains from missing_in_eb
 ignored_email_domains = global_config['script.presence']['ignored_email_domains']
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
+if missing_in_eb:
+    message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
+    for email in missing_in_eb:
+        if email not in eb_registrants:
+            message += f"{email}: {zoom_participants[email]['name']}\n"
 
-print("\nThe following people attended the Zoom event, but are not checked in in EventBrite")
-for email in missing_in_eb:
-    if email in eb_registrants:
-        print(f"{eb_registrants[email]['name']}: {email}")
+    message += "\nThe following people attended the Zoom event, but are not checked in in EventBrite:\n"
+    for email in missing_in_eb:
+        if email in eb_registrants:
+            message += f"{eb_registrants[email]['name']}: {email}\n"
 
-print("\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom")
-for email in should_not_in_eb:
-    if email in eb_registrants:
-        print(f"{eb_registrants[email]['name']}: {email}")
+if should_not_in_eb:
+    message += "\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom:\n"
+    for email in should_not_in_eb:
+        if email in eb_registrants:
+            message += f"{eb_registrants[email]['name']}: {email}\n"
 
+if not message:
+    message = "No mistake found in EventBrite checked-in attendees"
 
+event_id = eb_event['id']
+eventbrite_checkin_url = eval('f' + repr(global_config['script.presence']['eventbrite_checkin_url']))
 
+message += f"\nManage check-ins here: {eventbrite_checkin_url}"
+print(message)
+
+# post to Slack
+slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
+
+date = to_iso8061(eb_event['start']['local']).date()
+locale = eb_event['locale'].split('_')[0]
+course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
+channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
+
+if not slack.is_member(channel_name):
+    slack.join_channel(channel_name)
+
+slack.post_to_channel(channel_name, message)
 
