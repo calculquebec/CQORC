@@ -94,5 +94,8 @@ data = [[eval('f' + repr(config['username_template'])), attendee['name']] for us
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
 
+# clone the spreadsheet protection
+gsheets.copy_protection(source_file_id, sheet_id)
+
 print("URL: %s" % gdrive.get_file_url(new_file['id']))
 
