@@ -110,6 +110,51 @@ class SlackInterface:
             self.logger.error("Error inviting to conversation: {}".format(e))
 
 
+    def join_channel(self, channel_name):
+        try:
+            channel= self.get_channel_id(channel_name)
+            result = self.client.conversations_join(
+                    # The name of the conversation
+                    channel=channel,
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error joining conversation: {e}")
+
+
+    def is_member(self, channel_name):
+        try:
+            channel= self.get_channel_id(channel_name)
+            result = self.client.conversations_info(
+                    # The name of the conversation
+                    channel=channel,
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+            return result['channel']['is_member']
+
+        except SlackApiError as e:
+            self.logger.error(f"Error joining conversation: {e}")
+
+
+    def post_to_channel(self, channel_name, message):
+        try:
+            channel= self.get_channel_id(channel_name)
+            result = self.client.chat_postMessage(
+                    # The name of the conversation
+                    channel=channel,
+                    text=message
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error posting message: {e}")
+
+
+
 def main():
     import configparser
     import os
