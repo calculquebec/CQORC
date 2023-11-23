@@ -66,6 +66,35 @@ class GDriveInterface(GoogleInterface):
             return None
 
 
+    def get_file_id(self, folder_id, title):
+        # https://developers.google.com/drive/api/guides/search-files
+        try:
+            page_token = None
+            files = self.get_service().files().list(
+                        q=f"name='{title}' and '{folder_id}' in parents and trashed=false",
+                        fields="files(id, name)",
+                        spaces='drive',
+                        supportsAllDrives=True,
+                        pageSize=20,
+                        pageToken=page_token,
+                        corpora='allDrives',
+                        includeItemsFromAllDrives=True,
+                        orderBy='createdTime desc',
+                    ).execute()
+
+            if not files or not 'files' in files or len(files['files']) == 0:
+                self.logger.error('No file found')
+                return None
+            elif len(files['files']) > 1:
+                self.logger.error('More than one file found, returning the most recent one')
+
+            return files['files'][0]['id']
+
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return None
+
+
     def get_file_url(self, file_id):
         return self.get_file(file_id, "webViewLink")["webViewLink"]
 
@@ -87,6 +116,9 @@ def main():
     gdrive = GDriveInterface(credentials_file_path)
 #    source_file_id = "1eURwPuPMDkL2C0R7ZD4e6qHLl8DNaGxtwYLgsfZ79Ec"
 #    gdrive.copy_file(source_file_id, "Ceci est un test", "1xluiw761tnHq_khln7N5Jk-dBV59XJlB")
+#    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-21 - online - Introduction to Quantum Programming with Snowflurry [online] - Usernames")
+#    print(f"{str(files)}")
+
 
 if __name__ == "__main__":
     main()
