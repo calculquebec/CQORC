@@ -1,2 +1,1 @@
-slack-bolt
 slack-sdk==3.*
