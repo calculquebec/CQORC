@@ -81,7 +81,7 @@ class GDriveInterface(GoogleInterface):
                         includeItemsFromAllDrives=True,
                         orderBy='createdTime desc',
                     ).execute()
-            print(str(files))
+
             if not files or not 'files' in files or len(files['files']) == 0:
                 self.logger.error('No file found')
                 return None
