@@ -19,6 +19,7 @@ parser.add_argument("--url", help="URL to access the cluster")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--create_template_file", default=False, action='store_true', help="Create a spreadsheet to act as template file")
+parser.add_argument("--update", default=False, action='store_true', help="Update existing spreadsheet instead of creating a new one")
 args = parser.parse_args()
 
 # read configuration files
@@ -80,10 +81,13 @@ elif 'password_template' in config:
 filename_template = config.get(f"filename_template_{locale}", config.get('filename_template_en'))
 new_file_name = eval('f' + repr(filename_template))
 
-# create the spreadsheet
+# create or update the spreadsheet
 source_file_id = config.get("template_%s" % locale, config["template_en"])
-new_file = gdrive.copy_file(source_file_id, new_file_name, config['google_drive_folder_id'])
-sheet_id = new_file['id']
+if args.update:
+    sheet_id = gdrive.get_file_id(config['google_drive_folder_id'], new_file_name)
+else:
+    new_file = gdrive.copy_file(source_file_id, new_file_name, config['google_drive_folder_id'])
+    sheet_id = new_file['id']
 
 # update the spreadsheet
 header = [[url], [password]]
@@ -101,4 +105,4 @@ gsheets.update_values(sheet_id, data_range, data)
 # clone the spreadsheet protection
 gsheets.copy_protection(source_file_id, sheet_id)
 
-print("URL: %s" % gdrive.get_file_url(new_file['id']))
+print("URL: %s" % gdrive.get_file_url(sheet_id))
