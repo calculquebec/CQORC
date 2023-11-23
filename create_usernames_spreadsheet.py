@@ -94,7 +94,11 @@ header = [[url], [password]]
 header_range = config['header_range']
 gsheets.update_values(sheet_id, header_range, header)
 
-data = [[eval('f' + repr(config['username_template'])), attendee['name']] for user_index, attendee in enumerate(attendees.values())]
+# Create the data to be inserted, sort by name alphabetically
+data = [
+    [eval('f' + repr(config['username_template'])), attendee['name']]
+    for user_index, attendee in enumerate(sorted(attendees.values(), key=lambda x: x['name'].casefold()))
+]
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
 
