@@ -1,8 +1,5 @@
 venv
-secrets.cfg
-*.googleusercontent.com.json
-*credentials*.json
-*secret*.json
-*token*.json
+*.cfg
+*.json
 __pycache__
 secrets

@@ -82,7 +82,6 @@ class GDriveInterface(GoogleInterface):
                         orderBy='createdTime desc',
                     ).execute()
 
-
             if files:
                 return [file['id'] for file in files['files']]
             else:
