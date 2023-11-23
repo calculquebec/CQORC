@@ -125,8 +125,8 @@ def main():
     # These are to uncomment when you want to test something
 #    source_file_id = "1eURwPuPMDkL2C0R7ZD4e6qHLl8DNaGxtwYLgsfZ79Ec"
 #    gdrive.copy_file(source_file_id, "Ceci est un test", "1xluiw761tnHq_khln7N5Jk-dBV59XJlB")
-    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-21 - online - Introduction to Quantum Programming with Snowflurry [online] - Usernames")
-    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-23 - CIP201 - Maitriser les systèmes de l'Alliance [en ligne, CIP201] - Nom d'utilisateurs")
+#    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-21 - online - Introduction to Quantum Programming with Snowflurry [online] - Usernames")
+#    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-23 - CIP201 - Maitriser les systèmes de l'Alliance [en ligne, CIP201] - Nom d'utilisateurs")
 #    print(f"{str(files)}")
 
 
