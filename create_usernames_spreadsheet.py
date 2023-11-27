@@ -105,4 +105,30 @@ gsheets.update_values(sheet_id, data_range, data)
 # clone the spreadsheet protection
 gsheets.copy_protection(source_file_id, sheet_id)
 
-print("URL: %s" % gdrive.get_file_url(sheet_id))
+sheet_url = gdrive.get_file_id(sheet_id)
+
+print(f"URL: {sheet_url}")
+
+# post to Slack
+slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
+
+start = to_iso8061(eb_event['start']['local'])
+date = start.date()
+locale = eb_event['locale'].split('_')[0]
+course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
+channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
+
+if not slack.is_member(channel_name):
+    slack.join_channel(channel_name)
+
+message = f"Username spreadsheet: {sheet_url}"
+
+# post now
+slack.post_to_channel(channel_name, message)
+
+# post a reminder 30 minutes before start
+post_time = start + datetime.timedelta(minutes=-30)
+slack.post_to_channel(channel_name, message, post_time)
+
+# add a bookmark
+slack.add_bookmark_to_channel(channel_name, "Username spreadhseet", sheet_url)
