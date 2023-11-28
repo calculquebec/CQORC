@@ -10,6 +10,11 @@ from google.auth.transport.requests import Request
 
 class GoogleInterface:
     def __init__(self, key_file, credentials_type, service_name, service_version, scopes):
+        assert credentials_type in ["user", "service"], f'credentials_type should be either "user" or "service", found {credentials_type}'
+        assert os.path.exists(key_file), f'key file should exist, {key_file} does not exist'
+        assert isinstance(service_name, str), f"service_name should be a string, found {service_name}"
+        assert isinstance(service_version, str), f"service_version should be a string, found {service_version}"
+        assert isinstance(scopes, list), f"scopes should be a list, found {scopes}"
         self.key_file = key_file
         self.logger = logging.getLogger(__name__)
         self.scopes = scopes
