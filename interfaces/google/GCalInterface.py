@@ -16,6 +16,16 @@ class GCalInterface(GoogleInterface):
         self.tzinfo = pytz.timezone(self.timezone)
 
 
+    def get_event(self, event_id):
+        try:
+            event = self.get_service().events().get(calendarId=self.calendar_id, eventId=event_id).execute()
+            print(str(event))
+            return event
+
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+
+
     def get_events(self, start_time, limit=10, end_time=None):
         try:
             if end_time:
@@ -74,6 +84,44 @@ class GCalInterface(GoogleInterface):
             self.logger.error('An error occurred: %s' % error)
 
 
+    def update_event(self, event_id, start_time=None, end_time=None, summary=None, description=None, attendees=None, send_updates="all"):
+        # update an event
+        # documentation: https://developers.google.com/calendar/api/v3/reference/events/update
+        try:
+            # reference for fields of an event
+            # https://developers.google.com/calendar/api/v3/reference/events#resource
+            event = self.get_event(event_id)
+            if start_time: event['start'] = {'dateTime': start_time, 'timeZone': self.timezone}
+            if end_time: event['end'] = {'dateTime': end_time, 'timeZone': self.timezone}
+            if summary: event['summary'] = summary
+            if description: event['description'] = description
+
+            if isinstance(attendees, str):
+                attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            if attendees: event['attendees'] = attendees
+
+            event = self.get_service().events().update(
+                        calendarId=self.calendar_id,
+                        eventId=event_id,
+                        body=event,
+                        sendUpdates=send_updates
+                        ).execute()
+            self.logger.info("Event updated: %s" % (event.get('htmlLink')))
+            return event
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+
+
+    def add_attendees(self, event_id, attendees):
+        # update an event
+        # documentation: https://developers.google.com/calendar/api/v3/reference/events/update
+        event = self.get_event(event_id)
+        if isinstance(attendees, str):
+            attendees = [{'email': x.strip()} for x in attendees.split(',')]
+        attendees += event['attendees']
+        return self.update_event(event_id, attendees = attendees)
+
+
     def delete_event(self, event_id, send_updates="all"):
         # delete an event
         # documentation: https://developers.google.com/calendar/api/v3/reference/events/delete
@@ -109,12 +157,25 @@ def main():
 
     # Call the Calendar API
     now_dt = datetime.datetime.utcnow()
-    event = gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
+    event = gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca")
+    print(str(event))
+
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
     events = gcal.get_events(now, 20)
     events = gcal.get_events_by_date(datetime.datetime.today())
     print(str(events))
-    time.sleep(60)
+    time.sleep(30)
+    event = gcal.update_event(event['id'], start_time=((datetime.datetime.utcnow() + datetime.timedelta(hours=1)).isoformat()+"Z"),
+                                    end_time=((datetime.datetime.utcnow() + datetime.timedelta(hours=2)).isoformat()+"Z"),
+                                    summary="un nouveau résumé2",
+                                    description="une nouvelle description",
+                                    attendees="charles.coulombe@calculquebec.ca")
+    print(str(event))
+    time.sleep(30)
+    event = gcal.add_attendees(event['id'], "maxime.boissonneault@calculquebec.ca")
+    print(str(event))
+
+    time.sleep(30)
     gcal.delete_event(event['id'])
     print(str(events))
 #    events = gcal.get_events(now, 20)
