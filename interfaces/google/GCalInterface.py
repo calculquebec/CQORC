@@ -48,7 +48,7 @@ class GCalInterface(GoogleInterface):
             self.logger.error('An error occurred: %s' % error)
 
 
-    def create_event(self, start_time, end_time, summary, description, attendees):
+    def create_event(self, start_time, end_time, summary, description, attendees, send_updates="all"):
         # create an event
         # documentation: https://developers.google.com/calendar/api/v3/reference/events/insert
         try:
@@ -65,9 +65,11 @@ class GCalInterface(GoogleInterface):
 
             event = self.get_service().events().insert(
                         calendarId=self.calendar_id,
-                        body=event_dict
+                        body=event_dict,
+                        sendUpdates=send_updates
                         ).execute()
             self.logger.info("Event created: %s" % (event.get('htmlLink')))
+            return event
         except HttpError as error:
             self.logger.error('An error occurred: %s' % error)
 
