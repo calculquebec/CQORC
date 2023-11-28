@@ -2,23 +2,46 @@
 import datetime
 import logging
 import os
+import pytz
 
 from GoogleInterface import GoogleInterface
 from googleapiclient.errors import HttpError
 
 class GCalInterface(GoogleInterface):
-    def __init__(self, key_file, calendar_id, credentials_type='user', timezone = "America/Montreal"):
+    def __init__(self, key_file, calendar_id, timezone = "America/Montreal", credentials_type='user'):
         super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events'])
         self.logger = logging.getLogger(__name__)
         self.calendar_id = calendar_id
         self.timezone = timezone
+        self.tzinfo = pytz.timezone(self.timezone)
 
-    def get_events(self, start_time, limit=10):
+
+    def get_events(self, start_time, limit=10, end_time=None):
         try:
-            events_result = self.get_service().events().list(calendarId=self.calendar_id, timeMin=start_time,
+            if end_time:
+                events_result = self.get_service().events().list(calendarId=self.calendar_id, timeMin=start_time,
+                                              timeMax=end_time,
+                                              maxResults=limit, singleEvents=True,
+                                              orderBy='startTime').execute()
+            else:
+                events_result = self.get_service().events().list(calendarId=self.calendar_id, timeMin=start_time,
                                               maxResults=limit, singleEvents=True,
                                               orderBy='startTime').execute()
             events = events_result.get('items', [])
+            return events
+
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+
+
+    def get_events_by_date(self, date, limit=10):
+        try:
+            # get the start of day
+            start_time = date.replace(hour=0, minute=0, second=0)
+            end_time = date.replace(hour=23, minute=59, second=59)
+            start_time = self.tzinfo.localize(start_time).astimezone(pytz.utc).isoformat()
+            end_time = self.tzinfo.localize(end_time).astimezone(pytz.utc).isoformat()
+            events = self.get_events(start_time, limit=limit, end_time=end_time)
             return events
 
         except HttpError as error:
@@ -62,7 +85,7 @@ def main():
     config.read(config_files)
 
     # take the credentials file either from google.calendar or from google section
-    credentials_file = config['google.calendar'].get('credentials_file', config['google']['credentials_file'])
+    credentials_file = config['google']['credentials_file']
     credentials_file_path = os.path.join(secrets_dir, credentials_file)
 
     timezone = config['google.calendar'].get('timezone', config['global']['timezone'])
@@ -73,6 +96,8 @@ def main():
 #    gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
     events = gcal.get_events(now, 20)
+    events = gcal.get_events_by_date(datetime.datetime.today())
+    print(str(events))
     if not events:
         print('No upcoming events found.')
         return
