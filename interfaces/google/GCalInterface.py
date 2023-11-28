@@ -74,11 +74,25 @@ class GCalInterface(GoogleInterface):
             self.logger.error('An error occurred: %s' % error)
 
 
+    def delete_event(self, event_id, send_updates="all"):
+        # delete an event
+        # documentation: https://developers.google.com/calendar/api/v3/reference/events/delete
+        try:
+            event = self.get_service().events().delete(
+                        calendarId=self.calendar_id,
+                        eventId=event_id,
+                        sendUpdates=send_updates,
+                        ).execute()
+            self.logger.info(f"Event deleted: {event_id}")
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+
 
 def main():
     import configparser
     import os
     import glob
+    import time
     config = configparser.ConfigParser()
     config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
     secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
@@ -95,11 +109,15 @@ def main():
 
     # Call the Calendar API
     now_dt = datetime.datetime.utcnow()
-#    gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
+    event = gcal.create_event(now_dt.isoformat() + 'Z', (now_dt + datetime.timedelta(hours=3)).isoformat() + 'Z', "ceci est un test", "ceci est une description", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
     now = datetime.datetime.utcnow().isoformat() + 'Z'  # 'Z' indicates UTC time
     events = gcal.get_events(now, 20)
     events = gcal.get_events_by_date(datetime.datetime.today())
     print(str(events))
+    time.sleep(60)
+    gcal.delete_event(event['id'])
+    print(str(events))
+#    events = gcal.get_events(now, 20)
     if not events:
         print('No upcoming events found.')
         return
