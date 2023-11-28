@@ -182,7 +182,22 @@ class SlackInterface:
             self.logger.info(result)
 
         except SlackApiError as e:
-            self.logger.error(f"Error posting message: {e}")
+            self.logger.error(f"Error adding bookmark: {e}")
+
+
+    def archive_channel(self, channel_name):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.conversations_archive(
+                    # The name of the conversation
+                    channel=channel
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error archiving channel: {e}")
 
 
 
@@ -204,6 +219,7 @@ def main():
     slack.post_to_channel("ceci-est-un-test", "ceci est un message")
     slack.post_to_channel("ceci-est-un-test", "ceci est un message programmé", datetime.now() + timedelta(minutes=1))
     slack.add_bookmark_to_channel("ceci-est-un-test", "Google", "https://www.google.ca")
+#    slack.archive_channel("ceci-est-un-test")
 
 if __name__ == "__main__":
     main()
