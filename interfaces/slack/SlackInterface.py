@@ -2,6 +2,7 @@
 
 import logging
 import os
+from datetime import datetime, timedelta
 # Import WebClient from Python SDK (github.com/slackapi/python-slack-sdk)
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
@@ -139,13 +140,43 @@ class SlackInterface:
             self.logger.error(f"Error joining conversation: {e}")
 
 
-    def post_to_channel(self, channel_name, message):
+    def post_to_channel(self, channel_name, message, schedule=None):
         try:
             channel= self.get_channel_id(channel_name)
-            result = self.client.chat_postMessage(
+
+            if schedule:
+                schedule_timestamp = schedule.strftime('%s')
+                result = self.client.chat_scheduleMessage(
+                        # The name of the conversation
+                        channel=channel,
+                        text=message,
+                        post_at=schedule_timestamp
+                        )
+                # Log the result which includes information like the ID of the conversation
+                self.logger.info(result)
+            else:
+                result = self.client.chat_postMessage(
+                        # The name of the conversation
+                        channel=channel,
+                        text=message
+                        )
+                # Log the result which includes information like the ID of the conversation
+                self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error posting message: {e}")
+
+
+    def add_bookmark_to_channel(self, channel_name, title, link):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.bookmarks_add(
                     # The name of the conversation
-                    channel=channel,
-                    text=message
+                    channel_id=channel,
+                    type='link',
+                    title=title,
+                    link=link
                     )
             # Log the result which includes information like the ID of the conversation
             self.logger.info(result)
@@ -167,9 +198,12 @@ def main():
     config.read(config_files)
 
     slack = SlackInterface(config['slack']['bot_token'])
-    slack.create_channel("ceci-est-un-test")
-    slack.invite_to_channel("ceci-est-un-test", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
+#    slack.create_channel("ceci-est-un-test")
+#    slack.invite_to_channel("ceci-est-un-test", "maxime.boissonneault@calculquebec.ca, charles.coulombe@calculquebec.ca")
 #    slack.create_reminder("maxime.boissonneault@calculquebec.ca", "ceci est un test", "in 2 minutes")
+    slack.post_to_channel("ceci-est-un-test", "ceci est un message")
+    slack.post_to_channel("ceci-est-un-test", "ceci est un message programmé", datetime.now() + timedelta(minutes=1))
+    slack.add_bookmark_to_channel("ceci-est-un-test", "Google", "https://www.google.ca")
 
 if __name__ == "__main__":
     main()
