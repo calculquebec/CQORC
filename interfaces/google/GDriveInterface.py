@@ -66,12 +66,12 @@ class GDriveInterface(GoogleInterface):
             return None
 
 
-    def get_file_id(self, folder_id, title):
+    def get_file_ids(self, folder_id, title):
         # https://developers.google.com/drive/api/guides/search-files
         try:
             page_token = None
             files = self.get_service().files().list(
-                        q=f"name='{title}' and '{folder_id}' in parents and trashed=false",
+                        q=f'name="{title}" and "{folder_id}" in parents and trashed=false',
                         fields="files(id, name)",
                         spaces='drive',
                         supportsAllDrives=True,
@@ -82,17 +82,23 @@ class GDriveInterface(GoogleInterface):
                         orderBy='createdTime desc',
                     ).execute()
 
-            if not files or not 'files' in files or len(files['files']) == 0:
-                self.logger.error('No file found')
+            if files:
+                return [file['id'] for file in files['files']]
+            else:
                 return None
-            elif len(files['files']) > 1:
-                self.logger.error('More than one file found, returning the most recent one')
-
-            return files['files'][0]['id']
 
         except HttpError as error:
             self.logger.error(f"An error occurred: {error}")
             return None
+
+
+    def get_file_id(self, folder_id, title):
+        file_ids = self.get_file_ids(folder_id, title)
+        if len(file_ids) != 1:
+            self.logger.error(f"{len(file_ids)} files were found, expected exactly 1")
+            return None
+        else:
+            return file_ids[0]
 
 
     def get_file_url(self, file_id):
@@ -114,9 +120,12 @@ def main():
     credentials_file = config['google']['credentials_file']
     credentials_file_path = os.path.join(secrets_dir, credentials_file)
     gdrive = GDriveInterface(credentials_file_path)
+
+    # These are to uncomment when you want to test something
 #    source_file_id = "1eURwPuPMDkL2C0R7ZD4e6qHLl8DNaGxtwYLgsfZ79Ec"
 #    gdrive.copy_file(source_file_id, "Ceci est un test", "1xluiw761tnHq_khln7N5Jk-dBV59XJlB")
 #    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-21 - online - Introduction to Quantum Programming with Snowflurry [online] - Usernames")
+#    files = gdrive.get_file_id('1xluiw761tnHq_khln7N5Jk-dBV59XJlB', "2023-11-23 - CIP201 - Maitriser les systèmes de l'Alliance [en ligne, CIP201] - Nom d'utilisateurs")
 #    print(f"{str(files)}")
 
 
