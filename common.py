@@ -1,5 +1,6 @@
 from datetime import datetime
 import argparse, configparser, os, glob
+import yaml
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 
 def to_iso8061(dt, tz=None):
@@ -32,4 +33,35 @@ def get_config(args):
 
 def extract_course_code_from_title(config, title):
     return eval('f' + repr(config['global']['course_code_template']))
+
+
+class Trainers:
+    def __init__(file_name):
+        with open(file_name, 'r') as file:
+            self.trainers = yaml.safe_load(file)
+
+    def __getitem__(self, key):
+        return self.trainers[key]
+
+    def zoom_email(self, key):
+        return self.trainers[key].get('zoom_email', self.trainers[key]['email'])
+
+    def slack_email(self, key):
+        return self.trainers[key].get('slack_email', self.trainers[key]['email'])
+
+    def calendar_email(self, key)
+        return self.trainers[key].get('calendar_email', self.trainers[key]['email'])
+
+    def home_institution(self, key):
+        return self.trainers[key]['home_institution']
+
+    def fullname(self, keys):
+        return "%s %s" % (self.firstname(key), self.lastname(keyÉ))
+
+    def firstname(self, keys):
+        return self.trainers[key]['firstname']
+
+    def lastname(self, keys):
+        return self.trainers[key]['lastname']
+
 
