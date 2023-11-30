@@ -7,6 +7,7 @@ import interfaces.slack.SlackInterface as SlackInterface
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
+from common import Trainers
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
@@ -14,6 +15,7 @@ parser.add_argument("--zoom_id", help="EventBrite event id")
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+parser.add_argument("--noslack", default=False, action='store_true', help="Do not post to Slack")
 args = parser.parse_args()
 
 # read configuration files
@@ -92,10 +94,15 @@ for index, email in enumerate(missing_in_eb):
         if eb_email[0] in should_not_in_eb:
             should_not_in_eb.remove(eb_email[0])
 
+# remove trainers from missing_in_eb
+trainers = Trainers(global_config['global']['trainers_db'])
+missing_in_eb = [email for email in missing_in_eb if email not in trainers.all_emails()]
+
 # remove filtered domains from missing_in_eb
 ignored_email_domains = global_config['script.presence']['ignored_email_domains'].split(',')
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
+
 
 if missing_in_eb:
     message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
@@ -124,15 +131,16 @@ message += f"\nManage check-ins here: {eventbrite_checkin_url}"
 print(message)
 
 # post to Slack
-slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
+if not args.noslack:
+    slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
 
-date = to_iso8061(eb_event['start']['local']).date()
-locale = eb_event['locale'].split('_')[0]
-course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
-channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
+    date = to_iso8061(eb_event['start']['local']).date()
+    locale = eb_event['locale'].split('_')[0]
+    course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
+    channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
 
-if not slack.is_member(channel_name):
-    slack.join_channel(channel_name)
+    if not slack.is_member(channel_name):
+        slack.join_channel(channel_name)
 
-slack.post_to_channel(channel_name, message)
+    slack.post_to_channel(channel_name, message)
 

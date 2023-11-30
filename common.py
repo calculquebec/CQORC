@@ -36,32 +36,47 @@ def extract_course_code_from_title(config, title):
 
 
 class Trainers:
-    def __init__(file_name):
+    def __init__(self, file_name):
         with open(file_name, 'r') as file:
-            self.trainers = yaml.safe_load(file)
+            self._trainers = yaml.safe_load(file)
 
     def __getitem__(self, key):
-        return self.trainers[key]
+        return self._trainers[key]
+
+    def trainers(self):
+        return self._trainers.keys()
+
+    def email(self, key):
+        return self._trainers[key]['email']
+
+    def emails(self):
+        return [self.email(k) for k in self.trainers()]
+
+    def all_emails(self):
+        return set([self.email(k) for k in self.trainers()] +
+                   [self.zoom_email(k) for k in self.trainers()] +
+                   [self.slack_email(k) for k in self.trainers()] +
+                   [self.calendar_email(k) for k in self.trainers()])
 
     def zoom_email(self, key):
-        return self.trainers[key].get('zoom_email', self.trainers[key]['email'])
+        return self._trainers[key].get('zoom_email', self.email(key))
 
     def slack_email(self, key):
-        return self.trainers[key].get('slack_email', self.trainers[key]['email'])
+        return self._trainers[key].get('slack_email', self.email(key))
 
-    def calendar_email(self, key)
-        return self.trainers[key].get('calendar_email', self.trainers[key]['email'])
+    def calendar_email(self, key):
+        return self._trainers[key].get('calendar_email', self.email(key))
 
     def home_institution(self, key):
-        return self.trainers[key]['home_institution']
+        return self._trainers[key]['home_institution']
 
     def fullname(self, keys):
         return "%s %s" % (self.firstname(key), self.lastname(keyÉ))
 
     def firstname(self, keys):
-        return self.trainers[key]['firstname']
+        return self._trainers[key]['firstname']
 
     def lastname(self, keys):
-        return self.trainers[key]['lastname']
+        return self._trainers[key]['lastname']
 
 
