@@ -71,7 +71,7 @@ class Trainers:
         return self._trainers[key]['home_institution']
 
     def fullname(self, keys):
-        return "%s %s" % (self.firstname(key), self.lastname(keyÉ))
+        return "%s %s" % (self.firstname(key), self.lastname(key))
 
     def firstname(self, keys):
         return self._trainers[key]['firstname']
