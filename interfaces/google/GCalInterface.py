@@ -76,6 +76,8 @@ class GCalInterface(GoogleInterface):
             event_dict['description'] = description
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            if isinstance(attendees, list) and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees]
             event_dict['attendees'] = attendees
 
             event = self.get_service().events().insert(
@@ -103,6 +105,8 @@ class GCalInterface(GoogleInterface):
 
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            if isinstance(attendees, list) and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees]
             if attendees: event['attendees'] = attendees
 
             event = self.get_service().events().update(
