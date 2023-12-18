@@ -15,7 +15,11 @@ def to_iso8061(dt, tz=None):
     if isinstance(dt, datetime):
         return dt.astimezone(tz)
     else:
-        return datetime.fromisoformat(dt).astimezone(tz)
+        try:
+            date = datetime.fromisoformat(dt).astimezone(tz)
+        except:
+            date = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S').astimezone(tz)
+        return date
 
 def valid_date(d):
     """ Validate date is in ISO 8061 format, otherwise raise. """
