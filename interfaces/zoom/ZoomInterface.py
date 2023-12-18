@@ -115,11 +115,28 @@ class ZoomInterface:
         if response.get('next_page_token', None):
             all_webinars += self.get_webinars(response['next_page_token'])
 
+        webinars = all_webinars
         if date:
             webinars = [w for w in all_webinars if datetime.fromisoformat(w['start_time']).date() == date]
         if ids:
             webinars = [w for w in all_webinars if w['id'] in ids]
         return webinars
+
+
+    def get_webinar(self, webinar_id):
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
+        headers = self.get_authorization_header()
+        payload = {
+            "type": "scheduled",
+            "page_size": "300",
+        }
+
+        resp = requests.get(f"{self.api_base_url}/webinars/{webinar_id}",
+                             headers=headers,
+                             params=payload)
+
+        response = resp.json()
+        return response
 
 
     def update_webinar(self):
