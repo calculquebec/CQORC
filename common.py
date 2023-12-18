@@ -1,4 +1,5 @@
 from datetime import datetime
+import interfaces.google.GSheetsInterface as GSheetsInterface
 import argparse, configparser, os, glob
 import yaml
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
@@ -33,6 +34,20 @@ def get_config(args):
 
 def extract_course_code_from_title(config, title):
     return eval('f' + repr(config['global']['course_code_template']))
+
+def get_events_from_sheet_calendar(global_config, args):
+    # take the credentials file either from google section
+    credentials_file = global_config['google']['credentials_file']
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
+    credentials_file_path = os.path.join(secrets_dir, credentials_file)
+
+    # initialize the Google Drive interface
+    gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
+
+    list_of_events = gsheets.get_values(global_config['google']['calendar_file'], "A:Z", global_config['google']['calendar_sheet_name'])
+    header = list_of_events[0]
+    dict_of_events = [{header[i]: item[i] if i < len(item) else None for i in range(len(header))} for item in list_of_events[1:]]
+    return dict_of_events
 
 
 class Trainers:
