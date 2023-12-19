@@ -17,6 +17,7 @@ parser.add_argument("--all", default=False, action='store_true', help="Act for a
 parser.add_argument("--create", default=False, action='store_true', help="Create events")
 parser.add_argument("--update", default=False, action='store_true', help="Update events")
 parser.add_argument("--delete", default=False, action='store_true', help="Delete events")
+parser.add_argument("--no-notifications", default=False, action='store_true', help="Do not send update notifications to attendees")
 parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run")
 args = parser.parse_args()
 
@@ -38,6 +39,11 @@ events = get_events_from_sheet_calendar(config, args)
 # keep only events on the date listed
 if args.date:
     events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+
+if args.no_notifications:
+    send_updates = "none"
+else:
+    send_updates = "all"
 
 for event in events:
     try:
@@ -79,10 +85,10 @@ Join URL: {webinar['join_url']}"""
 
             if args.create:
                 if args.dry_run:
-                    cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees})"
+                    cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
                     print(f"Dry-run: would run {cmd}")
                 else:
-                    gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees)
+                    gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
             elif args.update:
                 existing_events = gcal.get_events_by_date(start_time)
                 if len(existing_events) != 1:
@@ -91,10 +97,10 @@ Join URL: {webinar['join_url']}"""
 
                 event_id = existing_events[0]['id']
                 if args.dry_run:
-                    cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees})"
+                    cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
                     print(f"Dry-run: would run {cmd}")
                 else:
-                    gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees)
+                    gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
             elif args.delete:
                 existing_events = gcal.get_events_by_date(start_time)
                 if len(existing_events) != 1:
@@ -104,10 +110,10 @@ Join URL: {webinar['join_url']}"""
                 event_id = existing_events[0]['id']
 
                 if args.dry_run:
-                    cmd = f"gcal.delete_event({event_id})"
+                    cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
                     print(f"Dry-run: would run {cmd}")
                 else:
-                    gcal.delete_event(event_id)
+                    gcal.delete_event(event_id, send_updates=send_updates)
     except:
         print(f"Error encountered when processing event {event}")
 
