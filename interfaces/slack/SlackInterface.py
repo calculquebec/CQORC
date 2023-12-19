@@ -222,6 +222,56 @@ class SlackInterface:
             self.logger.error(f"Error adding bookmark: {e}")
 
 
+    def list_channel_bookmarks(self, channel_name):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.bookmarks_list(
+                    # The name of the conversation
+                    channel_id=channel,
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+            return result['bookmarks']
+
+        except SlackApiError as e:
+            self.logger.error(f"Error listing bookmark: {e}")
+
+
+    def delete_bookmark_from_channel(self, channel_name, bookmark_id):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.bookmarks_remove(
+                    # The name of the conversation
+                    channel_id=channel,
+                    bookmark_id=bookmark_id,
+                    )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error removing bookmark: {e}")
+
+
+    def get_channel_bookmark_link(self, channel_name, bookmark_title):
+        for bookmark in self.list_channel_bookmarks(channel_name):
+            if bookmark['title'] == bookmark_title:
+                return bookmark['link']
+        return None
+
+
+    def update_channel_bookmarks(self, channel_name, bookmarks):
+        # delete existing bookmarks if their title match
+        for bookmark in self.list_channel_bookmarks(channel_name):
+            if bookmark['title'] in [b['title'] for b in bookmarks]:
+                self.delete_bookmark_from_channel(channel_name, bookmark['id'])
+
+        # add new bookmarks
+        for bookmark in bookmarks:
+            self.add_bookmark_to_channel(channel_name, bookmark['title'], bookmark['link'])
+
+
     def archive_channel(self, channel_name):
         try:
             channel= self.get_channel_id(channel_name)
