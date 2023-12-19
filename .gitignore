@@ -3,3 +3,4 @@ venv
 *.json
 __pycache__
 secrets
+descriptions
