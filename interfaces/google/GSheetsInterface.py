@@ -50,6 +50,32 @@ class GSheetsInterface(GoogleInterface):
             return error
 
 
+    def get_values(self, spreadsheet_id, range_name, sheet_name=None):
+        # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get
+        # https://developers.google.com/sheets/api/guides/values#python
+        """
+        Creates the batch_update the user has access to.
+        """
+        try:
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
+            result = (
+                self.get_service().spreadsheets()
+                    .values()
+                    .get(
+                        spreadsheetId=spreadsheet_id,
+                        range=range_name,
+                )
+                .execute()
+            )
+            rows = result.get("values", [])
+            self.logger.info(f"{rows}")
+            return rows
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return error
+
+
     def update_values(self, spreadsheet_id, range_name, values, sheet_name=None):
         # https://developers.google.com/sheets/api/guides/values
         """

@@ -4,7 +4,10 @@ import logging
 import os
 import pytz
 
-from GoogleInterface import GoogleInterface
+try:
+    from interfaces.google.GoogleInterface import GoogleInterface
+except:
+    from GoogleInterface import GoogleInterface
 from googleapiclient.errors import HttpError
 
 class GCalInterface(GoogleInterface):
@@ -19,7 +22,6 @@ class GCalInterface(GoogleInterface):
     def get_event(self, event_id):
         try:
             event = self.get_service().events().get(calendarId=self.calendar_id, eventId=event_id).execute()
-            print(str(event))
             return event
 
         except HttpError as error:
@@ -49,8 +51,11 @@ class GCalInterface(GoogleInterface):
             # get the start of day
             start_time = date.replace(hour=0, minute=0, second=0)
             end_time = date.replace(hour=23, minute=59, second=59)
-            start_time = self.tzinfo.localize(start_time).astimezone(pytz.utc).isoformat()
-            end_time = self.tzinfo.localize(end_time).astimezone(pytz.utc).isoformat()
+            if start_time.tzinfo is None:
+                start_time = self.tzinfo.localize(start_time).astimezone(pytz.utc)
+                end_time = self.tzinfo.localize(end_time).astimezone(pytz.utc)
+            start_time = start_time.isoformat()
+            end_time = end_time.isoformat()
             events = self.get_events(start_time, limit=limit, end_time=end_time)
             return events
 
@@ -71,6 +76,8 @@ class GCalInterface(GoogleInterface):
             event_dict['description'] = description
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            if isinstance(attendees, list) and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees]
             event_dict['attendees'] = attendees
 
             event = self.get_service().events().insert(
@@ -98,6 +105,8 @@ class GCalInterface(GoogleInterface):
 
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
+            if isinstance(attendees, list) and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees]
             if attendees: event['attendees'] = attendees
 
             event = self.get_service().events().update(
