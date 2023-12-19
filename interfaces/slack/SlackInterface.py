@@ -167,6 +167,43 @@ class SlackInterface:
             self.logger.error(f"Error posting message: {e}")
 
 
+    def list_channel_scheduled_messages(self, channel_name):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.chat_scheduledMessages_list(
+                        # The name of the conversation
+                        channel=channel
+                        )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+            return result['scheduled_messages']
+
+        except SlackApiError as e:
+            self.logger.error(f"Error listing scheduled messages: {e}")
+
+
+    def delete_channel_scheduled_messages(self, channel_name, message_id):
+        try:
+            channel= self.get_channel_id(channel_name)
+
+            result = self.client.chat_deleteScheduledMessage(
+                        # The name of the conversation
+                        channel=channel,
+                        scheduled_message_id=message_id
+                        )
+            # Log the result which includes information like the ID of the conversation
+            self.logger.info(result)
+
+        except SlackApiError as e:
+            self.logger.error(f"Error deleting scheduled messages: {e}")
+
+
+    def wipe_channel_scheduled_messages(self, channel_name):
+        for message in self.list_channel_scheduled_messages(channel_name):
+            self.delete_channel_scheduled_messages(channel_name, message['id'])
+
+
     def add_bookmark_to_channel(self, channel_name, title, link):
         try:
             channel= self.get_channel_id(channel_name)
