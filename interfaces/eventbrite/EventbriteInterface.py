@@ -141,7 +141,6 @@ class EventbriteInterface(eb.Eventbrite):
         response = self.post(f"/events/{event_id}/copy/", data=obj)
         if response.ok:
             self.logger.debug(f"Created event {response['id']}")
-            print(f'Successfully created {response["name"]["text"]} {response["start"]["local"]} {response["end"]["local"]}')
         else:
             self.logger.error(f'Error creating event! Got {response}')
             raise Exception(response)
@@ -175,8 +174,6 @@ class EventbriteInterface(eb.Eventbrite):
                 }
             }
             self._raise_or_ok(self.post(f"/events/{event_id}/ticket_classes/{ticket_class['id']}/", data=obj))
-
-        print(f'Successfully updated {event_id} ticket classes')
 
     def get_event_description(self, event_id):
         """
