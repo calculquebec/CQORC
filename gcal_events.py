@@ -33,6 +33,8 @@ gcal = GCalInterface.GCalInterface(credentials_file_path, config['google.calenda
 zoom_user = config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
 
+start_offset_minutes = int(config['google.calendar']['start_offset_minutes'])
+
 # get the events from the working calendar in the Google spreadsheets
 events = get_events_from_sheet_calendar(config, args)
 
@@ -77,10 +79,10 @@ Join URL: {webinar['join_url']}"""
 
         for date in set([start_time.date(), end_time.date()]):
             if date == original_start_time.date():
-                start_time = original_start_time
+                start_time = original_start_time + datetime.timedelta(minutes=start_offset_minutes)
                 end_time = original_start_time + datetime.timedelta(hours=duration)
             elif date == original_end_time.date():
-                start_time = original_end_time - datetime.timedelta(hours=duration)
+                start_time = original_end_time - datetime.timedelta(hours=duration) + datetime.timedelta(minutes=start_offset_minutes)
                 end_time = original_end_time
 
             if args.create:
