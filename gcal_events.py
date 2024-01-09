@@ -116,8 +116,8 @@ Join URL: {webinar['join_url']}"""
                     print(f"Dry-run: would run {cmd}")
                 else:
                     gcal.delete_event(event_id, send_updates=send_updates)
-    except:
-        print(f"Error encountered when processing event {event}")
+    except Exception as error:
+        print(f"Error encountered when processing event {event}: %s" % error)
 
 
 
