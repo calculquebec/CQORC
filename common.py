@@ -2,6 +2,8 @@ from datetime import datetime
 import interfaces.google.GSheetsInterface as GSheetsInterface
 import argparse, configparser, os, glob
 import yaml
+from git import Repo
+
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 
 def to_iso8061(dt, tz=None):
@@ -53,6 +55,17 @@ def get_events_from_sheet_calendar(global_config, args):
     dict_of_events = [{header[i]: item[i] if i < len(item) else None for i in range(len(header))} for item in list_of_events[1:]]
     return dict_of_events
 
+def actualize_repo(url, local_repo):
+    """
+    Clones or pulls the repo at `url` to `local_repo`.
+    """
+    repo = (
+        Repo(local_repo)
+        if os.path.exists(local_repo)
+        else Repo.clone_from(url, local_repo)
+    )
+    # pull in latest changes if any, expects remote to be named `origin`
+    repo.remotes.origin.pull()
 
 class Trainers:
     def __init__(self, file_name):
