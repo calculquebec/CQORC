@@ -1,6 +1,7 @@
 from datetime import datetime
 import interfaces.google.GSheetsInterface as GSheetsInterface
 import argparse, configparser, os, glob
+import urllib
 import yaml
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 
@@ -38,6 +39,11 @@ def get_config(args):
 
 def extract_course_code_from_title(config, title):
     return eval('f' + repr(config['global']['course_code_template']))
+
+def get_survey_link(config, locale, title, date):
+    survey_template = config['survey'][f"survey_link_template_{locale}"]
+    link = eval('f' + repr(survey_template))
+    return link
 
 def get_events_from_sheet_calendar(global_config, args):
     # take the credentials file either from google section
