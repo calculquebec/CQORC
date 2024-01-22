@@ -7,6 +7,7 @@ import interfaces.slack.SlackInterface as SlackInterface
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import get_events_from_sheet_calendar
+from common import get_survey_link
 from common import Trainers
 
 parser = argparse.ArgumentParser()
@@ -52,6 +53,9 @@ for event in events:
         date = to_iso8061(event['start_date']).date()
         course_code = event['code']
         locale = event['langue']
+        title = event['title']
+
+        survey_link = get_survey_link(config, locale, title, date)
         slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
         slack_channel_name = slack_channel_name.lower()
 
@@ -98,12 +102,15 @@ Join URL: {webinar['join_url']}"""
                 ]
             if webinar:
                 bookmarks += [{'title': 'Zoom URL Participants', 'link': webinar['join_url']}]
+            if survey_link:
+                bookmarks += [{'title': 'Survey', 'link': survey_link}]
 
             if args.dry_run:
                 cmd = f"slack.update_channel_bookmarks({slack_channel_name}, {bookmarks})"
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.update_channel_bookmarks(slack_channel_name, bookmarks)
+
 
         if args.archive:
             if args.dry_run:
