@@ -9,6 +9,19 @@ class ZoomInterface:
     api_base_url = "https://api.zoom.us/v2"
 
     def __init__(self, account_id, client_id, client_secret, timezone = "America/Montreal", user = "me"):
+        '''Initialize the Zoom interface object with API credentials
+
+        Reference: https://developers.zoom.us/docs/zoom-rooms/s2s-oauth/
+
+        Arguments:
+            account_id -- String. Usually stored secretly
+            client_id -- String. Usually stored secretly
+            client_secret -- String. Usually stored secretly
+            timezone -- String. Valid values are in all_timezones from pytz
+                https://pythonhosted.org/pytz/#helpers
+            user -- String. Zoom username, either email address or "me"
+        '''
+
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
@@ -17,7 +30,15 @@ class ZoomInterface:
 
 
     def get_authorization_header(self):
-        # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
+        '''Get the OAuth temporary authorization token
+
+        Reference:
+            https://developers.zoom.us/docs/zoom-rooms/s2s-oauth/
+            https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
+
+        Returns: dictionary with keys "Authorization" and "Content-Type"
+        '''
+
         data = {
             "grant_type": "account_credentials",
             "account_id": self.account_id,
@@ -26,9 +47,8 @@ class ZoomInterface:
         response = requests.post(self.auth_token_url,
                                  auth=(self.client_id, self.client_secret),
                                  data=data)
+        assert response.status_code == 200, "Unable to get access token"
 
-        if response.status_code!=200:
-            print("Unable to get access token")
         response_data = response.json()
         access_token = response_data["access_token"]
 
@@ -76,7 +96,7 @@ class ZoomInterface:
         }
         return content
 
-    def list_meetings(self):
+    def get_meetings(self):
         # to be done
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetings
         pass
@@ -97,25 +117,36 @@ class ZoomInterface:
         pass
 
 
-    def get_webinars(self, date = None, ids = None, next_page_token = None):
-        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
+    def get_webinars(self, date = None, ids = None):
+        '''Get the list of scheduled webinars, one dictionary per webinar
+
+        Reference:
+            https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinars
+
+        Arguments:
+            date -- datetime.datetime object, or None. Select by date.
+            ids -- list or set of webinar ID codes, or None. Select by ids.
+
+        Returns: list of webinars, one dictionary per webinar
+        '''
+
+        url = f'{self.api_base_url}/users/{self.user}/webinars'
         headers = self.get_authorization_header()
-        payload = {
+        params = {
             "type": "scheduled",
             "page_size": "300",
         }
-        if next_page_token:
-            payload['next_page_token'] = next_page_token
 
-        resp = requests.get(f"{self.api_base_url}/users/{self.user}/webinars",
-                             headers=headers,
-                             params=payload)
-
-        response = resp.json()
+        response = requests.get(url, params=params, headers=headers).json()
         all_webinars = response.get('webinars', None)
-        # get next pages if there is any
-        if response.get('next_page_token', None):
-            all_webinars += self.get_webinars(response['next_page_token'])
+        next_page_token = response.get('next_page_token', None)
+
+        # Get next pages if there is any
+        while next_page_token:
+            params['next_page_token'] = next_page_token
+            response = requests.get(url, params=params, headers=headers).json()
+            all_webinars += response.get('webinars', [])
+            next_page_token = response.get('next_page_token', None)
 
         webinars = all_webinars
         if date:
@@ -173,27 +204,32 @@ def main():
     '''Simple demonstration of the Zoom Interface
 
     Usage from the root directory of the project:
-
     PYTHONPATH=$PWD python interfaces/zoom/ZoomInterface.py
     '''
 
     from common import get_config
 
     class DefaultArgs:
+        '''Some attributes with default values for get_config()'''
         config_dir = '.'
         secrets_dir = '.'
 
+    # Get all configured values
     config = get_config(DefaultArgs())
-    secrets = config['zoom']
+    zoom_cfg = config['zoom']
 
+    # Create the Zoom interface object
     zoom = ZoomInterface(
-        account_id = secrets['account_id'],
-        client_id = secrets['client_id'],
-        client_secret = secrets['client_secret'],
-        timezone = config['global']['timezone'])
+        account_id = zoom_cfg['account_id'],
+        client_id = zoom_cfg['client_id'],
+        client_secret = zoom_cfg['client_secret'],
+        timezone = config['global']['timezone'],
+        user = zoom_cfg['user'])
 
     #print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
-    print(str(zoom.get_webinars()))
+    for webinar in zoom.get_webinars():
+        print(webinar['id'], webinar['start_time'][:16],
+              webinar['topic'][-48:])
 
 
 if __name__ == "__main__":
