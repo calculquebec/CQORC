@@ -15,6 +15,7 @@ class ZoomInterface:
         self.timezone = timezone
         self.user = user
 
+
     def get_authorization_header(self):
         # vient de https://www.makeuseof.com/generate-server-to-server-oauth-zoom-meeting-link-python/
         data = {
@@ -37,6 +38,7 @@ class ZoomInterface:
         }
 
         return headers
+
 
     def create_meeting(self, topic, duration, start_date, start_time):
         headers = self.get_authorization_header()
@@ -168,20 +170,31 @@ class ZoomInterface:
 
 
 def main():
-    import configparser
-    import os
-    import glob
-    config = configparser.ConfigParser()
-    config_dir = os.environ.get('CQORC_CONFIG_DIR', '.')
-    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', '.')
-    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
-    print("Reading config files: %s" % str(config_files))
-    config.read(config_files)
+    '''Simple demonstration of the Zoom Interface
 
+    Usage from the root directory of the project:
+
+    PYTHONPATH=$PWD python interfaces/zoom/ZoomInterface.py
+    '''
+
+    from common import get_config
+
+    class DefaultArgs:
+        config_dir = '.'
+        secrets_dir = '.'
+
+    config = get_config(DefaultArgs())
     secrets = config['zoom']
-    zoom = ZoomInterface(secrets['account_id'], secrets['client_id'], secrets['client_secret'], config['global']['timezone'])
 
-    print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
+    zoom = ZoomInterface(
+        account_id = secrets['account_id'],
+        client_id = secrets['client_id'],
+        client_secret = secrets['client_secret'],
+        timezone = config['global']['timezone'])
+
+    #print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
+    print(str(zoom.get_webinars()))
+
 
 if __name__ == "__main__":
     main()
