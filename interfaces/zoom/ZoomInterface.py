@@ -226,9 +226,23 @@ class ZoomInterface:
         return webinars
 
 
-    def update_webinar(self):
-        # to be done
-        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarUpdate
+    def update_webinar(self, webinar_id, params):
+        '''Update the webinar specified by ID
+
+        Reference:
+            https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarUpdate
+
+        Arguments:
+            webinar_id -- int or string. To specify the webinar by ID.
+            params -- dictionary. Contains parameters to send.
+        '''
+        response = requests.patch(
+            f'{self.api_base_url}/webinars/{webinar_id}',
+            json=params,
+            headers=self.get_authorization_header(),
+        )
+
+        assert response.status_code == 204, response.content
         pass
 
 

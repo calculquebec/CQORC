@@ -121,13 +121,13 @@ class Trainers:
     def home_institution(self, key):
         return self._trainers[key]['home_institution']
 
-    def fullname(self, keys):
+    def fullname(self, key):
         return "%s %s" % (self.firstname(key), self.lastname(key))
 
-    def firstname(self, keys):
+    def firstname(self, key):
         return self._trainers[key]['firstname']
 
-    def lastname(self, keys):
+    def lastname(self, key):
         return self._trainers[key]['lastname']
 
 
