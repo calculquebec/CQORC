@@ -142,11 +142,14 @@ Join URL: {webinar['join_url']}"""
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
 
-            message_numbers = int(config['slack']['message_numbers'])
+            message_prefixes = []
+            for key in config['slack']:
+                key_parts = key.split('_')
+                if len(key_parts) == 3 and key_parts[0] == "message" and key_parts[2] == "template":
+                    message_prefixes += ['_'.join(key_parts[0:2])]
 
             messages = []
-            for index in range(message_numbers):
-                prefix = f"message_{index}"
+            for prefix in message_prefixes:
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
                 for date in set([start_time.date(), end_time.date()]):
                     if date == original_start_time.date():
@@ -162,6 +165,8 @@ Join URL: {webinar['join_url']}"""
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
                         elif f'{prefix}_offset_end' in config['slack']:
                             time = end_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_end']))
+                        elif f'{prefix}_offset_now' in config['slack']:
+                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_now']))
 
                         messages += [{'time': time, 'message': text}]
 
