@@ -60,13 +60,14 @@ class Trainers:
             self._trainers = yaml.safe_load(file)
 
     def __getitem__(self, key):
+        key = key.strip()
         return self._trainers[key]
 
     def trainers(self):
         return self._trainers.keys()
 
     def email(self, key):
-        return self._trainers[key]['email']
+        return self[key]['email']
 
     def emails(self):
         return [self.email(k) for k in self.trainers()]
@@ -78,24 +79,24 @@ class Trainers:
                    [self.calendar_email(k) for k in self.trainers()])
 
     def zoom_email(self, key):
-        return self._trainers[key].get('zoom_email', self.email(key))
+        return self[key].get('zoom_email', self.email(key))
 
     def slack_email(self, key):
-        return self._trainers[key].get('slack_email', self.email(key))
+        return self[key].get('slack_email', self.email(key))
 
     def calendar_email(self, key):
-        return self._trainers[key].get('calendar_email', self.email(key))
+        return self[key].get('calendar_email', self.email(key))
 
     def home_institution(self, key):
-        return self._trainers[key]['home_institution']
+        return self[key]['home_institution']
 
     def fullname(self, keys):
         return "%s %s" % (self.firstname(key), self.lastname(key))
 
     def firstname(self, keys):
-        return self._trainers[key]['firstname']
+        return self[key]['firstname']
 
     def lastname(self, keys):
-        return self._trainers[key]['lastname']
+        return self[key]['lastname']
 
 
