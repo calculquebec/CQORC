@@ -31,13 +31,39 @@ def valid_date(d):
     except ValueError:
         raise argparse.ArgumentTypeError(f"Invalid ISO 8061 date value: {d!r}.")
 
-def get_config(args):
-    global_config = configparser.ConfigParser()
+
+def get_config(args, debug_level:int=0):
+    '''Read all configuration files (*.cfg) from configuration directories
+
+    Arguments:
+        args -- An argparse.Namespace object or any object with at least two
+                default directories as attributes:
+            .config_dir -- String. It is used if CQORC_CONFIG_DIR is not set
+            .secrets_dir -- String. It is used if CQORC_SECRETS_DIR is not set
+        debug_level -- Integer <= 2
+            If 0 (default), quiet mode
+            If 1, print the list of configuration files (all *.cfg)
+            If 2, print all the above, plus configuration section names
+
+    Returns: a ConfigParser object with parsed configurations from *.cfg files
+    '''
+
     config_dir = os.environ.get('CQORC_CONFIG_DIR', args.config_dir)
     secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
-    config_files = glob.glob(os.path.join(config_dir, '*.cfg')) + glob.glob(os.path.join(secrets_dir, '*.cfg'))
+
+    config_files = \
+        glob.glob(os.path.join(config_dir, '*.cfg')) + \
+        glob.glob(os.path.join(secrets_dir, '*.cfg'))
+    if debug_level >=1:
+        print('Reading config files:\n-', '\n- '.join(config_files))
+
+    global_config = configparser.ConfigParser()
     global_config.read(config_files)
+    if debug_level >= 2:
+        print('Config sections:\n-', '\n- '.join(global_config.sections()))
+
     return global_config
+
 
 def extract_course_code_from_title(config, title):
     return eval('f' + repr(config['global']['course_code_template']))
@@ -108,13 +134,13 @@ class Trainers:
     def home_institution(self, key):
         return self._trainers[key]['home_institution']
 
-    def fullname(self, keys):
+    def fullname(self, key):
         return "%s %s" % (self.firstname(key), self.lastname(key))
 
-    def firstname(self, keys):
+    def firstname(self, key):
         return self._trainers[key]['firstname']
 
-    def lastname(self, keys):
+    def lastname(self, key):
         return self._trainers[key]['lastname']
 
 
