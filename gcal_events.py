@@ -60,13 +60,7 @@ for event in events:
         end_time = to_iso8061(event['end_date'])
         duration = int(event['hours'])
 
-        webinar = zoom.get_webinars(date = start_time.date())
-        webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
-        description = ''
-        if webinar:
-            description = f"""
-Start URL: {webinar['start_url']}
-Join URL: {webinar['join_url']}"""
+        description = f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens"""
 
         # events on two days
         two_day_events = False
