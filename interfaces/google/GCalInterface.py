@@ -74,6 +74,7 @@ class GCalInterface(GoogleInterface):
             event_dict['end'] = {'dateTime': end_time, 'timeZone': self.timezone}
             event_dict['summary'] = summary
             event_dict['description'] = description
+            event_dict['transparency'] = 'opaque'
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
             if isinstance(attendees, list) and isinstance(attendees[0], str):
@@ -102,6 +103,7 @@ class GCalInterface(GoogleInterface):
             if end_time: event['end'] = {'dateTime': end_time, 'timeZone': self.timezone}
             if summary: event['summary'] = summary
             if description: event['description'] = description
+            event['transparency'] = 'opaque'
 
             if isinstance(attendees, str):
                 attendees = [{'email': x.strip()} for x in attendees.split(',')]
