@@ -27,23 +27,7 @@ python3 create_certificate.py --eventbrite_id 778466443087 --config_dir /path/to
 
 """
 
-
-# read configuration files
-global_config = get_config(args)
-
-# initialize EventBrite interface:
-eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
-
-# get event information:
-if args.eventbrite_id:
-    eb_event = eb.get_event(args.eventbrite_id)
-
-
-# Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
-eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
-
-
-def write_certificates(event, guests, certificate_svg_tplt_dir):
+def write_certificates(event, guests, certificate_svg_tplt_dir, language=None):
     """
     Generates one PDF per attendee
     
@@ -59,6 +43,9 @@ def write_certificates(event, guests, certificate_svg_tplt_dir):
     certificate_svg_tplt_dir : directory
         Directory that contain the template for the french and english certificate.
 
+    language : str
+        Event language. en = english ; fr = french
+
     Returns
     -------
     One certificate for each participant in french or english depending on the event language.
@@ -70,12 +57,21 @@ def write_certificates(event, guests, certificate_svg_tplt_dir):
     except OSError:
         pass
 
+    # Set language:
+    if((language != "en") and (language != "fr") and (language != None)):
+        print("We do not support other languages than French and English to create a certificate. Please enter 'en' for english and 'fr' for french if applicable.")
+        exit(1)
+    elif language == None:
+        language = event['locale'].split("_")[0]
+        if((language != "en") and (language != "fr")):
+            print("We do not support other languages than French and English to create a certificate.")
+            exit(1)
 
-    if event['locale'].split("_")[0] == "en":
+    if language == "en":
         for file in os.listdir(certificate_svg_tplt_dir):
             if file == "certificate_template_sample_english_logo.svg":
                 tpl_name = file
-    elif event['locale'].split("_")[0] == "fr":
+    elif language == "fr":
         for file in os.listdir(certificate_svg_tplt_dir):
             if file == "certificate_template_sample_french_logo.svg":
                 tpl_name = file
@@ -124,9 +120,7 @@ def safe_name(name):
 
     return name.upper()
 
-
-
-def build_registrant_list(event, guests):
+def build_registrant_list(event, guests, title=None, duration=None, date=None, language=None):
     """
     Generate a registration list.    
 
@@ -138,36 +132,66 @@ def build_registrant_list(event, guests):
     guests : dict
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
         get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
+    
+    title : str
+        Event title
 
+    duration : float
+        Event duration in hour
+
+    date : date
+        Event date (iso8061) XXXX-XX-XX ; year-month-day
+
+    language : str
+        Event language. en = english ; fr = french
     
     ----------
     Returns - Python dictionary with formatted attendees information
     """
+  
+    # Set title:
+    if title == None:
+        title = event['name']['text'].strip()
 
-    title = event['name']['text'].strip()
+    # Set duration:
+    if duration == None:
+        time_start = datetime.strptime(event['start']['local'], '%Y-%m-%dT%H:%M:%S')
+        time_end   = datetime.strptime(event[ 'end' ]['local'], '%Y-%m-%dT%H:%M:%S')
+        duration = (time_end - time_start).total_seconds() / 3600
 
-    time_start = datetime.strptime(event['start']['local'], '%Y-%m-%dT%H:%M:%S')
-    time_end   = datetime.strptime(event[ 'end' ]['local'], '%Y-%m-%dT%H:%M:%S')
-    duration = (time_end - time_start).total_seconds() / 3600
+    # Set date:
+    if date == None:
+        date = to_iso8061(event['start']['local']).date()
 
-    if event['locale'].split("_")[0] == "en":
-        filename_template = './certificates/Certificate_CQ_{}_{}_{}.pdf'
-        if duration <= 1.0:
-            duration = str((time_end - time_start).total_seconds() / 3600) + " hour."
-        else:
-            duration = str((time_end - time_start).total_seconds() / 3600) + " hours."
-
-    elif event['locale'].split("_")[0] == "fr":
-        filename_template = './certificates/Attestation_CQ_{}_{}_{}.pdf'
-        if duration <= 1.0:
-            duration = str((time_end - time_start).total_seconds() / 3600) + " heure."
-        else:
-            duration = str((time_end - time_start).total_seconds() / 3600) + " heures."
-    else:
-        print("We cannot create a certificate in other languages than French and English.")
+    # Set language:
+    if((language != "en") and (language != "fr") and (language != None)):
+        print("We do not support other languages than French and English to create a certificate. Please enter 'en' for english and 'fr' for french if applicable.")
         exit(1)
+    elif language == None:
+        language = event['locale'].split("_")[0]
+        if((language != "en") and (language != "fr")):
+            print("We do not support other languages than French and English to create a certificate.")
+            exit(1)
+    
+    # Set filename_template:
+    if language == "en":
+        filename_template = './certificates/Certificate_CQ_{}_{}_{}.pdf'
+    elif language == "fr":
+        filename_template = './certificates/Attestation_CQ_{}_{}_{}.pdf'
 
-    date = to_iso8061(event['start']['local']).date()
+    # Complete duration with the right term for time spelling:
+    if language == "en":
+        if duration <= 1.0:
+            duration = str(duration) + " hour."
+        else:
+            duration = str(duration) + " hours."
+
+    elif language == "fr":
+        if duration <= 1.0:
+            duration = str(duration) + " heure."
+        else:
+            duration = str(duration) + " heures."
+    
 
     attended_guests = []
 
@@ -192,8 +216,24 @@ def build_registrant_list(event, guests):
     return attended_guests
 
 
+# Read configuration files:
+global_config = get_config(args)
+
+# Initialize EventBrite interface:
+eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
+
+# Get event information:
+if args.eventbrite_id:
+    eb_event = eb.get_event(args.eventbrite_id)
+
+# Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
+eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
+
+# Generate a registration list:
 attended_guest = build_registrant_list(eb_event, eb_attendees)
 
+# Get certificate template directory:
 tpl_dir = args.certificate_svg_tplt_dir
 
+# Write the certificates:
 write_certificates(eb_event, attended_guest, tpl_dir)
