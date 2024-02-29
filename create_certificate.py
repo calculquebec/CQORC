@@ -13,21 +13,24 @@ from common import get_config
 from common import to_iso8061
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--eventbrite_id", help="EventBrite event id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--certificate_svg_tplt_dir", help="Directory that holds certificate templates.")
+parser.add_argument("--title", default=None, help="Event title")
+parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
+parser.add_argument("--duration", default=None, help="Event duration in hour")
+parser.add_argument("--language", default=None, help="Event language. en = english ; fr = french")
+parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
+parser.add_argument("event_id", help="EventBrite event id")
+parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
 args = parser.parse_args()
-
 
 """
 Usage:
 
-python3 create_certificate.py --eventbrite_id 778466443087 --config_dir /path/to/CQORC --certificate_svg_tplt_dir /path/to/directory/with/svg/template 
-
+python3 create_certificate.py 778466443087
 """
 
-def write_certificates(event, guests, certificate_svg_tplt_dir, language=None):
+def write_certificates(event, guests, certificate_svg_tplt_dir, language, certificate_dir):
     """
     Generates one PDF per attendee
     
@@ -46,6 +49,9 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language=None):
     language : str
         Event language. en = english ; fr = french
 
+    certificate_dir : directory
+        Directory to write the certificates.
+
     Returns
     -------
     One certificate for each participant in french or english depending on the event language.
@@ -53,29 +59,28 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language=None):
     """
     print("--- Generating PDFs ---")
     try:
-        os.mkdir('./certificates')
+        os.mkdir(certificate_dir)
     except OSError:
         pass
 
     # Set language:
-    if((language != "en") and (language != "fr") and (language != None)):
-        print("We do not support other languages than French and English to create a certificate. Please enter 'en' for english and 'fr' for french if applicable.")
-        exit(1)
-    elif language == None:
+    if not language:
         language = event['locale'].split("_")[0]
-        if((language != "en") and (language != "fr")):
-            print("We do not support other languages than French and English to create a certificate.")
-            exit(1)
+        
+    elif ((language != "en") and (language != "fr")):
+        print("write_certificates: We do not support other languages than French and English to create a certificate.")
+        exit(1)
 
+    # Set template name:
     if language == "en":
         for file in os.listdir(certificate_svg_tplt_dir):
-            if file == "certificate_template_sample_english_logo.svg":
+            if file == "attestation_template_sample_english_logo.svg":
                 tpl_name = file
     elif language == "fr":
         for file in os.listdir(certificate_svg_tplt_dir):
-            if file == "certificate_template_sample_french_logo.svg":
+            if file == "attestation_template_sample_french_logo.svg":
                 tpl_name = file
-
+    
     tpl = jinja2.Environment(loader=jinja2.FileSystemLoader(certificate_svg_tplt_dir)).get_template(tpl_name)
 
     for guest in guests:
@@ -120,7 +125,7 @@ def safe_name(name):
 
     return name.upper()
 
-def build_registrant_list(event, guests, title=None, duration=None, date=None, language=None):
+def build_registrant_list(event, guests, title, duration, date, language, certificate_dir):
     """
     Generate a registration list.    
 
@@ -132,7 +137,7 @@ def build_registrant_list(event, guests, title=None, duration=None, date=None, l
     guests : dict
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
         get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
-    
+
     title : str
         Event title
 
@@ -144,40 +149,38 @@ def build_registrant_list(event, guests, title=None, duration=None, date=None, l
 
     language : str
         Event language. en = english ; fr = french
+
+    certificate_dir : directory
+        Directory to write the certificates.
     
     ----------
     Returns - Python dictionary with formatted attendees information
     """
   
     # Set title:
-    if title == None:
+    if not title:
         title = event['name']['text'].strip()
 
     # Set duration:
-    if duration == None:
+    if not duration:
         time_start = datetime.strptime(event['start']['local'], '%Y-%m-%dT%H:%M:%S')
-        time_end   = datetime.strptime(event[ 'end' ]['local'], '%Y-%m-%dT%H:%M:%S')
+        time_end   = datetime.strptime(event['end']['local'], '%Y-%m-%dT%H:%M:%S')
         duration = (time_end - time_start).total_seconds() / 3600
 
     # Set date:
-    if date == None:
+    if not date:
         date = to_iso8061(event['start']['local']).date()
 
     # Set language:
-    if((language != "en") and (language != "fr") and (language != None)):
-        print("We do not support other languages than French and English to create a certificate. Please enter 'en' for english and 'fr' for french if applicable.")
-        exit(1)
-    elif language == None:
+    if not language:
         language = event['locale'].split("_")[0]
-        if((language != "en") and (language != "fr")):
-            print("We do not support other languages than French and English to create a certificate.")
-            exit(1)
+        
+    elif ((language != "en") and (language != "fr")):
+        print("build_registrant_list: write_certificates: We do not support other languages than French and English to create a certificate.")
+        exit(1)
     
     # Set filename_template:
-    if language == "en":
-        filename_template = './certificates/Certificate_CQ_{}_{}_{}.pdf'
-    elif language == "fr":
-        filename_template = './certificates/Attestation_CQ_{}_{}_{}.pdf'
+    filename_template = str(certificate_dir) + "/Attestation_CQ_{}_{}_{}.pdf"
 
     # Complete duration with the right term for time spelling:
     if language == "en":
@@ -191,7 +194,6 @@ def build_registrant_list(event, guests, title=None, duration=None, date=None, l
             duration = str(duration) + " heure."
         else:
             duration = str(duration) + " heures."
-    
 
     attended_guests = []
 
@@ -213,6 +215,7 @@ def build_registrant_list(event, guests, title=None, duration=None, date=None, l
                                                          order_id)     
         }
         attended_guests.append(context)
+   
     return attended_guests
 
 
@@ -223,17 +226,13 @@ global_config = get_config(args)
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 
 # Get event information:
-if args.eventbrite_id:
-    eb_event = eb.get_event(args.eventbrite_id)
+eb_event = eb.get_event(args.event_id)
 
 # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
 eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
 # Generate a registration list:
-attended_guest = build_registrant_list(eb_event, eb_attendees)
-
-# Get certificate template directory:
-tpl_dir = args.certificate_svg_tplt_dir
+attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
 
 # Write the certificates:
-write_certificates(eb_event, attended_guest, tpl_dir)
+write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
