@@ -138,8 +138,8 @@ class Trainers:
     def fullname(self, key):
         return "%s %s" % (self.firstname(key), self.lastname(key))
 
-    def firstname(self, keys):
+    def firstname(self, key):
         return self[key]['firstname']
 
-    def lastname(self, keys):
+    def lastname(self, key):
         return self[key]['lastname']
