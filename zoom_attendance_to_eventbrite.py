@@ -87,6 +87,8 @@ else:
     if len(todays_events) != 1:
         print(f"Error, number of EventBrite event found is not 1: {len(todays_events)}, use --zoom_id and --eventbrite_id")
         exit(1)
+    else:
+        eb_event = todays_events[0]
 
 
 if not eb_event:
