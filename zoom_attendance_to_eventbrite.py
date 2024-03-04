@@ -84,9 +84,10 @@ else:
     for e in eb_events:
         if args.date and to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
             todays_events += [e]
-    if len(todays_events) != 1:
-        print(f"Error, number of EventBrite event found is not 1: {len(todays_events)}, use --zoom_id and --eventbrite_id")
-        exit(1)
+        if len(todays_events) > 1:
+            print(f"Error, number of EventBrite event found is not 1: {len(todays_events)}, use --zoom_id and --eventbrite_id")
+            exit(1)
+    eb_event = todays_events[0]
 
 
 if not eb_event:
