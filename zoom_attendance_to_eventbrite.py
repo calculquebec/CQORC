@@ -80,10 +80,14 @@ if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
+    todays_events = []
     for e in eb_events:
         if args.date and to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
-            eb_event = e
-            break
+            todays_events += [e]
+    if len(todays_events) != 1:
+        print(f"Error, number of EventBrite event found is not 1: {len(todays_events)}, use --zoom_id and --eventbrite_id")
+        exit(1)
+
 
 if not eb_event:
     print("Error, no EventBrite event found")
