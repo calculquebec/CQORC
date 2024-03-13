@@ -210,7 +210,7 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
         else:
             duration = str(duration) + " heures."
 
-    filename_template = str(certificate_dir) + ATTESTATION_CQ_TEMPLATE
+    filename_template = os.path.join(certificate_dir,  ATTESTATION_CQ_TEMPLATE)
 
     attended_guests = []
 
@@ -383,7 +383,7 @@ if __name__ == '__main__':
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
     #print(attended_guest)
 
-    attended_guest_test = [{'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'PAUL-ANDRÉ', 'last_name': 'ROBILLARD', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8675624389', 'filename': './certificates/Attestation_CQ_PAUL-ANDRE_ROBILLARD_8675624389.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'JOSPER JUNIOR', 'last_name': 'JOSEPH', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8681885929', 'filename': './certificates/Attestation_CQ_JOSPER_JUNIOR_JOSEPH_8681885929.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'GANIYOU', 'last_name': 'DA SILVA', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8682499269', 'filename': './certificates/Attestation_CQ_GANIYOU_DA_SILVA_8682499269.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'LARA', 'last_name': 'HARTER', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8685161409', 'filename': './certificates/Attestation_CQ_LARA_HARTER_8685161409.pdf'}]
+    attended_guest_test = [{'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'TOBI', 'last_name': 'NADEAU', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '867', 'filename': './certificates/Attestation_CQ_TOBI_NADEAU_867.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'JUNIOR', 'last_name': 'NADEAU', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '929', 'filename': './certificates/Attestation_CQ_JUNIOR_NADEAU_929.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]'}]
     print(attended_guest_test)
 
     # Write the certificates:
