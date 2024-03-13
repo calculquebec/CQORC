@@ -22,7 +22,7 @@ import interfaces.eventbrite.EventbriteInterface as Eventbrite
 from common import get_config
 from common import to_iso8061
 
-ATTESTATION_CQ_TEMPLATE = "/Attestation_CQ_{}_{}_{}.pdf"
+ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
