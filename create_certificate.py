@@ -48,7 +48,7 @@ args = parser.parse_args()
 """
 Usage:
 
-python3 create_certificate.py --event_id
+python3 create_certificate.py --event_id 778466443087
 """
 
 
