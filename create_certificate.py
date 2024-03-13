@@ -30,7 +30,7 @@ parser.add_argument("--secrets_dir", default=".", help="Directory that holds the
 parser.add_argument("--title", default=None, help="Event title")
 parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
 parser.add_argument("--duration", default=None, help="Event duration in hour")
-parser.add_argument("--language", default=None, help="Event language. en = english ; fr = french")
+parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
 parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
 parser.add_argument("--event_id", help="EventBrite event id", required=True)
 parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
@@ -88,11 +88,7 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language, certif
     # Set language:
     if not language:
         language = event['locale'].split("_")[0]
-        print(language)
         
-    elif ((language != "en") and (language != "fr")):
-        print("We do not support other languages than French and English to create a certificate.")
-        exit(1)
 
     # Set template name:
     if language == "en":
@@ -200,9 +196,6 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
     if not language:
         language = event['locale'].split("_")[0]
         
-    elif ((language != "en") and (language != "fr")):
-        print("We do not support other languages than French and English to create a certificate.")
-        exit(1)
 
     # Complete duration with the right term for time spelling:
     if language == "en":
@@ -320,9 +313,7 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
 
     if not language:
         language = event['locale'].split("_")[0]
-    elif ((language != "en") and (language != "fr")):
-        print("We do not support sending email other than in french or english.")
-        exit(1)
+    
 
     if language == "fr":
         for file in os.listdir(email_tplt_dir):
