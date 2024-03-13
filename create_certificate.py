@@ -6,11 +6,23 @@ import unidecode
 import os
 import jinja2
 import click
+import yaml
+import getpass
+import smtplib
+
 from datetime import datetime
+from email import encoders
+from email.header import Header
+from email.mime.base import MIMEBase
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 
 from common import get_config
 from common import to_iso8061
+
+ATTESTATION_CQ_TEMPLATE = "/Attestation_CQ_{}_{}_{}.pdf"
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
@@ -20,15 +32,25 @@ parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-X
 parser.add_argument("--duration", default=None, help="Event duration in hour")
 parser.add_argument("--language", default=None, help="Event language. en = english ; fr = french")
 parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
-parser.add_argument("event_id", help="EventBrite event id")
+parser.add_argument("--event_id", help="EventBrite event id", required=True)
 parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
+parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
+parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
+parser.add_argument("--email_tplt_dir", help="Email template directory", default="./email_template")
+parser.add_argument("--send_self", default=False, help="Send to yourself")
+parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee")
+parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
+parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
 args = parser.parse_args()
+
+
 
 """
 Usage:
 
-python3 create_certificate.py 778466443087
+python3 create_certificate.py --event_id
 """
+
 
 def write_certificates(event, guests, certificate_svg_tplt_dir, language, certificate_dir):
     """
@@ -66,9 +88,10 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language, certif
     # Set language:
     if not language:
         language = event['locale'].split("_")[0]
+        print(language)
         
     elif ((language != "en") and (language != "fr")):
-        print("write_certificates: We do not support other languages than French and English to create a certificate.")
+        print("We do not support other languages than French and English to create a certificate.")
         exit(1)
 
     # Set template name:
@@ -169,18 +192,17 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
 
     # Set date:
     if not date:
-        date = to_iso8061(event['start']['local']).date()
+        date = datetime.strptime(event['start']['local'], "%Y-%m-%dT%H:%M:%S")
+        date = date.strftime("%Y-%m-%d")
+
 
     # Set language:
     if not language:
         language = event['locale'].split("_")[0]
         
     elif ((language != "en") and (language != "fr")):
-        print("build_registrant_list: write_certificates: We do not support other languages than French and English to create a certificate.")
+        print("We do not support other languages than French and English to create a certificate.")
         exit(1)
-    
-    # Set filename_template:
-    filename_template = str(certificate_dir) + "/Attestation_CQ_{}_{}_{}.pdf"
 
     # Complete duration with the right term for time spelling:
     if language == "en":
@@ -194,6 +216,8 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
             duration = str(duration) + " heure."
         else:
             duration = str(duration) + " heures."
+
+    filename_template = str(certificate_dir) + ATTESTATION_CQ_TEMPLATE
 
     attended_guests = []
 
@@ -218,21 +242,164 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
    
     return attended_guests
 
+def create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_certificate=True):
+    """
+    Create email, attatch body and PDF certificate
 
-# Read configuration files:
-global_config = get_config(args)
+    Parameters
+    ----------
+    gmail_user : str
+        Gmail username
 
-# Initialize EventBrite interface:
-eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
+    guest : dict
+        Attendees that participated, that is that have their status to `checked in` or `attended`.
+        get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
-# Get event information:
-eb_event = eb.get_event(args.event_id)
+    email_tplt : dict
+        Ditionnary with email template.
 
-# Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
-eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
+    send_self : bool
+        Send to yourself.
 
-# Generate a registration list:
-attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
+    attach_certificate : bool
+        If we want certificate to be attached to the email.
 
-# Write the certificates:
-write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+    self_email: str
+        Email to send tests to
+
+    language : str
+        Event language. en = english ; fr = french
+
+    """
+    # Create email
+    outer = MIMEMultipart()
+    outer['From'] = gmail_user
+    if send_self:
+        if self_email:
+            outer['To'] = self_email
+        else:
+            outer['To'] = gmail_user
+    else:
+        outer['To'] = guest['email']
+    outer['Reply-to'] = email_tplt['replyto']
+    
+    outer['Subject'] = Header(email_tplt['subject'])
+
+    # Attach body
+    body = MIMEText(email_tplt['message'].format(**guest), 'plain')
+    outer.attach(body)
+    print("Outer variable:")
+    print(outer)
+
+    # Attach PDF Certificate
+    if attach_certificate:
+        msg = MIMEBase('application', "octet-stream")
+        with open(guest['filename'], 'rb') as file_:
+            msg.set_payload(file_.read())
+        encoders.encode_base64(msg)
+        msg.add_header('Content-Disposition', 'attachment', filename=os.path.basename(guest['filename']))
+        outer.attach(msg)
+
+    return outer
+
+
+def send_email(event, guests, email_tplt_dir, send_self, number_to_send, language, gmail_user=None, gmail_password=None, self_email=None, attach_certificate=True):
+    """
+    Create email, attatch body and PDF certificate
+
+    Parameters
+    ----------
+    guests : dict
+        Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
+        get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
+
+    email_tplt_dir : directory
+        Directory containing email template in french and english.
+    
+    """
+
+    if not language:
+        language = event['locale'].split("_")[0]
+    elif ((language != "en") and (language != "fr")):
+        print("We do not support sending email other than in french or english.")
+        exit(1)
+
+    if language == "fr":
+        for file in os.listdir(email_tplt_dir):
+            if file == "email_certificates_FR.yml":
+                email_tplt_file = email_tplt_dir + "/" + file
+    elif language == "en":
+        for file in os.listdir(email_tplt_dir):
+            if file == "email_certificates_EN.yml":
+                email_tplt_file = email_tplt_dir + "/" + file
+
+    email_tplt = {}
+
+    with open(email_tplt_file, 'rt', encoding='utf8') as f:
+        email_tplt = yaml.load(f, Loader=yaml.FullLoader)
+
+    if not gmail_user:
+        gmail_user = input('gmail username: ')
+    if not gmail_password:
+        gmail_password = getpass.getpass('gmail password: ')
+    if not self_email:
+        self_email = gmail_user
+
+    with smtplib.SMTP('smtp.gmail.com', 587) as server:
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(gmail_user, gmail_password)
+        nsent = 0
+
+    for guest in guests:
+            email = create_email(gmail_user, guest, email_tplt, args.send_self, args.self_email, attach_certificate)
+
+            # Send email
+            if send_self:
+                print("okay")
+                print('sending email to YOU about: {first_name} ({email})...'.format(**guest))
+            else:
+                print('sending email to: {first_name} {last_name} ({email})...'.format(**guest))
+
+            try:
+                server.sendmail(email['From'], email['To'], email.as_string())
+            except smtplib.SMTPAuthenticationError as e:
+                # If the GMail account is now allowing secure apps, the script will fail.
+                # read : http://stackabuse.com/how-to-send-emails-with-gmail-using-python/
+                print('Go to https://myaccount.google.com/lesssecureapps and Allow less secure apps.')
+                sys.exit(1)
+            nsent = nsent + 1
+            if nsent == number_to_send:
+                break
+    
+
+if __name__ == '__main__':
+
+    # Read configuration files:
+    global_config = get_config(args)
+
+    # Initialize EventBrite interface:
+    eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
+
+    # Get event information:
+    eb_event = eb.get_event(args.event_id)
+
+    # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
+    eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
+
+    # Generate a registration list:
+    attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
+    #print(attended_guest)
+
+    attended_guest_test = [{'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'PAUL-ANDRÉ', 'last_name': 'ROBILLARD', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8675624389', 'filename': './certificates/Attestation_CQ_PAUL-ANDRE_ROBILLARD_8675624389.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'JOSPER JUNIOR', 'last_name': 'JOSEPH', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8681885929', 'filename': './certificates/Attestation_CQ_JOSPER_JUNIOR_JOSEPH_8681885929.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'GANIYOU', 'last_name': 'DA SILVA', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8682499269', 'filename': './certificates/Attestation_CQ_GANIYOU_DA_SILVA_8682499269.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'LARA', 'last_name': 'HARTER', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '8685161409', 'filename': './certificates/Attestation_CQ_LARA_HARTER_8685161409.pdf'}]
+    print(attended_guest_test)
+
+    # Write the certificates:
+    write_certificates(eb_event, attended_guest_test, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+
+    # Create email:
+
+    if args.send_atnd or args.send_self:
+        send_email(eb_event, attended_guest_test, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.gmail_user, args.gmail_password, args.self_email, attach_certificate=True)
+
