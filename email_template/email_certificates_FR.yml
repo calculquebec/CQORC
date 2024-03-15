@@ -1,0 +1,11 @@
+--- # Email components
+replyto: 'no-reply@calculquebec.ca'
+subject: 'Attestation de formation de Calcul Québec'
+
+message: |-
+  Bonjour {first_name} {last_name},
+  
+  Ci-joint votre certification pour la formation {workshop} du {date}.
+  
+  Cordialement,
+  Calcul Québec

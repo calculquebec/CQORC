@@ -24,27 +24,6 @@ from common import to_iso8061
 
 ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 
-parser = argparse.ArgumentParser()
-parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--title", default=None, help="Event title")
-parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
-parser.add_argument("--duration", default=None, help="Event duration in hour")
-parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
-parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
-parser.add_argument("--event_id", help="EventBrite event id", required=True)
-parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
-parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
-parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
-parser.add_argument("--email_tplt_dir", help="Email template directory", default="./email_template")
-parser.add_argument("--send_self", default=False, help="Send to yourself")
-parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee")
-parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
-parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
-args = parser.parse_args()
-
-
-
 """
 Usage:
 
@@ -254,14 +233,11 @@ def create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_ce
     send_self : bool
         Send to yourself.
 
-    attach_certificate : bool
-        If we want certificate to be attached to the email.
-
     self_email: str
         Email to send tests to
-
-    language : str
-        Event language. en = english ; fr = french
+    
+    attach_certificate : bool
+        If we want certificate to be attached to the email.
 
     """
     # Create email
@@ -281,8 +257,6 @@ def create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_ce
     # Attach body
     body = MIMEText(email_tplt['message'].format(**guest), 'plain')
     outer.attach(body)
-    print("Outer variable:")
-    print(outer)
 
     # Attach PDF Certificate
     if attach_certificate:
@@ -302,13 +276,37 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
 
     Parameters
     ----------
+    event : str
+        EventBrite event id
+
     guests : dict
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
         get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
 
     email_tplt_dir : directory
         Directory containing email template in french and english.
+
+    send_self : bool
+        Send to yourself.
+
+    number_to_send : int
+        Number of certificate to send.
+
+    language : str
+        Event language. en = english ; fr = french
+
+    gmail_user : str
+        Gmail username
+
+    gmail_password : str
+        Gmail password
     
+    self_email : str
+        Email to use if sending to self.
+
+    attach_certificate : bool
+        Parameter to attach or not the certificate to the email.
+
     """
 
     if not language:
@@ -343,29 +341,49 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
         server.login(gmail_user, gmail_password)
         nsent = 0
 
-    for guest in guests:
-            email = create_email(gmail_user, guest, email_tplt, args.send_self, args.self_email, attach_certificate)
+        for guest in guests:
+                email = create_email(gmail_user, guest, email_tplt, args.send_self, args.self_email, attach_certificate)
 
-            # Send email
-            if send_self:
-                print("okay")
-                print('sending email to YOU about: {first_name} ({email})...'.format(**guest))
-            else:
-                print('sending email to: {first_name} {last_name} ({email})...'.format(**guest))
+                # Send email
+                if send_self:
+                    print('sending email to YOU about: {first_name} ({email})...'.format(**guest))
+                else:
+                    print('sending email to: {first_name} {last_name} ({email})...'.format(**guest))
 
-            try:
-                server.sendmail(email['From'], email['To'], email.as_string())
-            except smtplib.SMTPAuthenticationError as e:
-                # If the GMail account is now allowing secure apps, the script will fail.
-                # read : http://stackabuse.com/how-to-send-emails-with-gmail-using-python/
-                print('Go to https://myaccount.google.com/lesssecureapps and Allow less secure apps.')
-                sys.exit(1)
-            nsent = nsent + 1
-            if nsent == number_to_send:
-                break
+                try:
+                    server.sendmail(email['From'], email['To'], email.as_string())
+                except smtplib.SMTPAuthenticationError as e:
+                    # If the GMail account is now allowing secure apps, the script will fail.
+                    # read : http://stackabuse.com/how-to-send-emails-with-gmail-using-python/
+                    print('Go to https://myaccount.google.com/lesssecureapps and Allow less secure apps.')
+                    sys.exit(1)
+                nsent = nsent + 1
+                if nsent == number_to_send:
+                    break
     
 
 if __name__ == '__main__':
+
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
+    parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+    parser.add_argument("--title", default=None, help="Event title")
+    parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
+    parser.add_argument("--duration", default=None, help="Event duration in hour")
+    parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
+    parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
+    parser.add_argument("--event_id", help="EventBrite event id", required=True)
+    parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
+    parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
+    parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
+    parser.add_argument("--email_tplt_dir", help="Email template directory", default="./email_template")
+    parser.add_argument("--send_self", default=False, help="Send to yourself")
+    parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee")
+    parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
+    parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
+    args = parser.parse_args()
+
 
     # Read configuration files:
     global_config = get_config(args)
@@ -381,16 +399,11 @@ if __name__ == '__main__':
 
     # Generate a registration list:
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
-    #print(attended_guest)
-
-    attended_guest_test = [{'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'TOBI', 'last_name': 'NADEAU', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '867', 'filename': './certificates/Attestation_CQ_TOBI_NADEAU_867.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]', 'first_name': 'JUNIOR', 'last_name': 'NADEAU', 'email': 'helene.gingras@calculquebec.ca', 'date': '2024-02-21', 'duration': '3.0 heures.', 'order_id': '929', 'filename': './certificates/Attestation_CQ_JUNIOR_NADEAU_929.pdf'}, {'workshop': 'Meilleures pratiques en Python : CPU à GPU [en ligne, CPUGPU]'}]
-    print(attended_guest_test)
 
     # Write the certificates:
     write_certificates(eb_event, attended_guest_test, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
     # Create email:
-
     if args.send_atnd or args.send_self:
         send_email(eb_event, attended_guest_test, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.gmail_user, args.gmail_password, args.self_email, attach_certificate=True)
 
