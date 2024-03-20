@@ -57,7 +57,7 @@ for event in events:
 
         attendees_keys = []
         if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += [event['host']]
+        if event['host']: attendees_keys += event['host'].split(',')
         if event['assistants']: attendees_keys += event['assistants'].split(',')
         attendees = [trainers.zoom_email(key) for key in attendees_keys]
         attendees = list(set(attendees))
@@ -72,7 +72,7 @@ for event in events:
 
         if args.update_webinar_panelists or args.update_webinar:
             panelists = zoom.get_panelists(webinar['id'])
-            for k in event['assistants'].split(',') + [event['instructor']] + [event['host']]:
+            for k in event['assistants'].split(',') + [event['instructor']] + event['host'].split(','):
                 key = k.strip()
                 if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
                     zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
@@ -80,7 +80,7 @@ for event in events:
         if args.update_webinar_hosts or args.update_webinar:
             params = {}
             settings = {}
-            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in [event['host']]])
+            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in event['host'].split(',')])
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 
