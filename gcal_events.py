@@ -58,7 +58,7 @@ for event in events:
 
         start_time = to_iso8061(event['start_date'])
         end_time = to_iso8061(event['end_date'])
-        duration = int(event['hours'])
+        duration = float(event['hours'])
 
         description = f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens"""
 
