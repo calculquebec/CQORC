@@ -64,7 +64,7 @@ for event in events:
 
         start_time = to_iso8061(event['start_date'])
         end_time = to_iso8061(event['end_date'])
-        duration = int(event['hours'])
+        duration = float(event['hours'])
 
         webinars = zoom.get_webinars(date = start_time.date())
         if webinars:
@@ -96,6 +96,8 @@ for event in events:
             settings['survey_url'] = get_survey_link(config, locale, title, date)
             settings['question_and_answer'] = {'allow_submit_questions': True, 'enable': True, 'attendees_can_upvote': True, 'attendees_can_comment': True, 'allow_anonymous_questions':False }
             params['settings'] = settings
+            params['duration'] = str(int(duration*60))
+            params['start_time'] = start_time.astimezone(datetime.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
             pp = pprint.PrettyPrinter(indent=4)
             print("Params:")
             pp.pprint(params)
