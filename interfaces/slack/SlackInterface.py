@@ -43,9 +43,11 @@ class SlackInterface:
 
             # if we find the channel, it ends here
             for channel in result['channels']:
-                if channel['name'] == name:
-                    self.channel_dict[name] = channel['id']
-                    return channel['id']
+                # populate channel_dict for all channels retrieved
+                self.channel_dict[channel['name']] = channel['id']
+
+            if name in self.channel_dict:
+                return self.channel_dict[name]
 
             # if it was not found, check next cursor
             # at the end, next_cursor will be an empty string
