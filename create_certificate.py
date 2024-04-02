@@ -5,7 +5,6 @@ import cairosvg
 import unidecode
 import os
 import jinja2
-import click
 import yaml
 import getpass
 import smtplib
