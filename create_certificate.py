@@ -23,6 +23,7 @@ from common import to_iso8061
 
 ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 
+
 """
 Usage:
 
@@ -400,9 +401,9 @@ if __name__ == '__main__':
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
 
     # Write the certificates:
-    write_certificates(eb_event, attended_guest_test, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+    write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
     # Create email:
     if args.send_atnd or args.send_self:
-        send_email(eb_event, attended_guest_test, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.gmail_user, args.gmail_password, args.self_email, attach_certificate=True)
+        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.gmail_user, args.gmail_password, args.self_email, attach_certificate=True)
 
