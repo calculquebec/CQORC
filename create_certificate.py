@@ -307,15 +307,10 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
     if not language:
         language = event['locale'].split("_")[0]
     
+    for file in os.listdir(email_tplt_dir):
+        if file == f"email_certificates_{language}.yml":
+            email_tplt_file = email_tplt_dir + "/" + file
 
-    if language == "fr":
-        for file in os.listdir(email_tplt_dir):
-            if file == "email_certificates_FR.yml":
-                email_tplt_file = email_tplt_dir + "/" + file
-    elif language == "en":
-        for file in os.listdir(email_tplt_dir):
-            if file == "email_certificates_EN.yml":
-                email_tplt_file = email_tplt_dir + "/" + file
 
     email_tplt = {}
 
