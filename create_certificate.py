@@ -70,14 +70,9 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language, certif
         
 
     # Set template name:
-    if language == "en":
-        for file in os.listdir(certificate_svg_tplt_dir):
-            if file == "attestation_template_sample_english_logo.svg":
-                tpl_name = file
-    elif language == "fr":
-        for file in os.listdir(certificate_svg_tplt_dir):
-            if file == "attestation_template_sample_french_logo.svg":
-                tpl_name = file
+    for file in os.listdir(certificate_svg_tplt_dir):
+        if file == f"attestation_template_sample_{language}_logo.svg":
+            tpl_name = file
     
     tpl = jinja2.Environment(loader=jinja2.FileSystemLoader(certificate_svg_tplt_dir)).get_template(tpl_name)
 
@@ -378,8 +373,8 @@ if __name__ == '__main__':
     parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
     parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
     parser.add_argument("--email_tplt_dir", help="Email template directory", default="./email_template")
-    parser.add_argument("--send_self", default=False, help="Send to yourself")
-    parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee")
+    parser.add_argument("--send_self", default=False, help="Send to yourself", action="store_true")
+    parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee", action="store_true")
     parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
     parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
     args = parser.parse_args()
@@ -387,7 +382,7 @@ if __name__ == '__main__':
 
     # Read configuration files:
     global_config = get_config(args)
-
+    
     # Initialize EventBrite interface:
     eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 
@@ -403,7 +398,12 @@ if __name__ == '__main__':
     # Write the certificates:
     write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
+    # Get email config:
+    self_email = global_config['email']['self_email']
+    gmail_user = global_config['email']['gmail_user']
+    gmail_password = global_config['email']['gmail_password']
+
     # Create email:
     if args.send_atnd or args.send_self:
-        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.gmail_user, args.gmail_password, args.self_email, attach_certificate=True)
+        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, gmail_user=gmail_user, gmail_password=gmail_password, self_email=self_email, attach_certificate=True)
 
