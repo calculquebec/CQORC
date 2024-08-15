@@ -3,7 +3,7 @@ import os, argparse, datetime
 
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
-from CQORCcalendar import Calendar
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
@@ -11,7 +11,7 @@ from common import get_survey_link
 from common import Trainers
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", default=None, help="Manage only for this course id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--create", default=False, action='store_true', help="Create channel")
@@ -38,31 +38,45 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 
 
 # get the events from the working calendar in the Google spreadsheets
-events = Calendar(config, args).get_all_sessions()
+calendar = CQORCcalendar.Calendar(config, args)
 
 # keep only events on the date listed
-if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+if args.course_id:
+    if args.course_id in calendar.keys():
+        courses = [calendar[args.course_id]]
+    else:
+        print(f"Course {args.course_id} not found")
+        exit(1)
+else:
+    courses = calendar.get_courses()
 
-for event in events:
+for course in courses:
     try:
+        first_session = course['sessions'][0]
+
         # no course code, continue
-        if not 'code' in event:
+        if not 'code' in first_session:
             continue
 
-        date = to_iso8061(event['start_date']).date()
-        course_code = event['code']
-        locale = event['langue']
-        title = event['title']
+        date = to_iso8061(first_session['start_date']).date()
+        course_code = first_session['code']
+        locale = first_session['langue']
+        title = first_session['title']
 
         survey_link = get_survey_link(config, locale, title, date)
-        slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
-        slack_channel_name = slack_channel_name.lower()
+
+        # if is documented, use that, otherwise create it
+        slack_channel_name = first_session['slack_channel']
+        if not slack_channel_name:
+            slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
+            slack_channel_name = slack_channel_name.lower()
+            calendar.set_slack_channel(first_session['course_id'])
 
         attendees_keys = []
-        if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += [event['host']]
-        if event['assistants']: attendees_keys += event['assistants'].split(',')
+        for role in ['instructor', 'host', 'assistants']:
+            for session in course['sessions']:
+                if session[role]:
+                    attendees_keys += session[role].split(',')
         attendees = [trainers.slack_email(key) for key in attendees_keys]
         attendees = list(set(attendees))
 
@@ -70,17 +84,12 @@ for event in events:
         end_time = to_iso8061(event['end_date'])
         duration = int(event['hours'])
 
-        webinar = zoom.get_webinars(date = start_time.date())
-        if webinar:
-            webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
-        description = ''
-        if webinar:
-            description = f"""
-Start URL: {webinar['start_url']}
-Join URL: {webinar['join_url']}"""
-
-        original_start_time = start_time
-        original_end_time = end_time
+        if first_session['zoom_id']:
+            webinar = zoom.get_webinar(webinar_id = first_session['zoom_id'])
+        else:
+            webinar = zoom.get_webinars(date = start_time.date())
+            if webinar:
+                webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
 
         if args.create:
             if args.dry_run:
@@ -133,6 +142,8 @@ Join URL: {webinar['join_url']}"""
             else:
                 print(f"{slack.list_channel_scheduled_messages(slack_channel_name)}")
 
+        original_start_time = start_time
+        original_end_time = end_time
         if args.messages:
             # events on two days
             if start_time.date() != end_time.date():
@@ -182,5 +193,7 @@ Join URL: {webinar['join_url']}"""
     except Exception as e:
         print(f"Error encountered when processing event {event}: \n\n{e}")
 
+
+calendar.update_spreadsheet()
 
 

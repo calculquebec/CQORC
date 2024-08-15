@@ -29,10 +29,13 @@ class Calendar:
     def get_all_sessions(self):
         return [session for course in self.courses for session in course['sessions']]
 
-    def keys():
+    def get_courses(self):
+        return self.courses.values()
+
+    def keys(self):
         return self.courses.keys()
 
-    def items():
+    def items(self):
         return self.courses.items()
 
     def __getitem__(self, course_id):
