@@ -1,3 +1,4 @@
+import os
 import interfaces.google.GSheetsInterface as GSheetsInterface
 
 class Calendar:
@@ -26,7 +27,7 @@ class Calendar:
 
     # equivalent of former events_from_sheet_calendar
     def get_all_sessions(self):
-        return [session for session in course['sessions'] for course in self.courses]
+        return [session for course in self.courses for session in course['sessions']]
 
     def keys():
         return self.courses.keys()
