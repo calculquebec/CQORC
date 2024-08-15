@@ -4,10 +4,10 @@ import os, argparse, datetime
 import interfaces.google.GCalInterface as GCalInterface
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import yaml
+from CQORCcalendar import Calendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
-from common import get_events_from_sheet_calendar
 from common import actualize_repo
 
 parser = argparse.ArgumentParser()
@@ -44,7 +44,7 @@ def get_eb_event_by_date(query_date):
     return eb_event
 
 # get the events from the working calendar in the Google spreadsheets
-events = get_events_from_sheet_calendar(config, args)
+events = Calendar(config, args).get_all_sessions()
 
 # keep only events on the date listed
 if args.date:

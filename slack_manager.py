@@ -3,10 +3,10 @@ import os, argparse, datetime
 
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
+from CQORCcalendar import Calendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
-from common import get_events_from_sheet_calendar
 from common import get_survey_link
 from common import Trainers
 
@@ -38,7 +38,7 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 
 
 # get the events from the working calendar in the Google spreadsheets
-events = get_events_from_sheet_calendar(config, args)
+events = Calendar(config, args).get_all_sessions()
 
 # keep only events on the date listed
 if args.date:
