@@ -36,82 +36,64 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 start_offset_minutes = int(config['google.calendar']['start_offset_minutes'])
 
 # get the events from the working calendar in the Google spreadsheets
-events = Calendar(config, args).get_all_sessions()
+sessions = Calendar(config, args).get_all_sessions()
 
-# keep only events on the date listed
+# keep only sessions on the date listed
 if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+    sessions = [session for session in sessions if args.date.date().isoformat() in session['start_date']]
 
 if args.no_notifications:
     send_updates = "none"
 else:
     send_updates = "all"
 
-for event in events:
+for session in sessions:
     try:
-        title = f"{event['code']} - {event['title']}"
+        title = f"{session['code']} - {session['title']}"
         attendees_keys = []
-        if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += [event['host']]
-        if event['assistants']: attendees_keys += event['assistants'].split(',')
+        for role in ['instructor', 'host', 'assistants']:
+            if session[role]:
+                attendees_keys += session[role].split(',')
         attendees = [trainers.calendar_email(key) for key in attendees_keys]
 
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = float(event['hours'])
+        start_time = to_iso8061(session['start_date']) + datetime.timedelta(minutes=start_offset_minutes)
+        end_time = to_iso8061(session['end_date'])
 
         description = f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens"""
 
-        # events on two days
-        two_day_events = False
-        if start_time.date() != end_time.date():
-            two_day_events = True
-            duration = duration/2.
+        if args.create:
+            if args.dry_run:
+                cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+        elif args.update:
+            existing_events = gcal.get_events_by_date(start_time)
+            if len(existing_events) != 1:
+                print("Number of existing events found different than 1. Case not handled. Exiting")
+                exit(1)
 
-        original_start_time = start_time
-        original_end_time = end_time
+            event_id = existing_events[0]['id']
+            if args.dry_run:
+                cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+        elif args.delete:
+            existing_events = gcal.get_events_by_date(start_time)
+            if len(existing_events) != 1:
+                print("Number of existing events found different than 1. Case not handled. Exiting")
+                exit(1)
 
-        for date in set([start_time.date(), end_time.date()]):
-            if date == original_start_time.date():
-                start_time = original_start_time + datetime.timedelta(minutes=start_offset_minutes)
-                end_time = original_start_time + datetime.timedelta(hours=duration)
-            elif date == original_end_time.date():
-                start_time = original_end_time - datetime.timedelta(hours=duration) + datetime.timedelta(minutes=start_offset_minutes)
-                end_time = original_end_time
+            event_id = existing_events[0]['id']
 
-            if args.create:
-                if args.dry_run:
-                    cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-            elif args.update:
-                existing_events = gcal.get_events_by_date(start_time)
-                if len(existing_events) != 1:
-                    print("Number of existing events found different than 1. Case not handled. Exiting")
-                    exit(1)
-
-                event_id = existing_events[0]['id']
-                if args.dry_run:
-                    cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-            elif args.delete:
-                existing_events = gcal.get_events_by_date(start_time)
-                if len(existing_events) != 1:
-                    print("Number of existing events found different than 1. Case not handled. Exiting")
-                    exit(1)
-
-                event_id = existing_events[0]['id']
-
-                if args.dry_run:
-                    cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.delete_event(event_id, send_updates=send_updates)
+            if args.dry_run:
+                cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                gcal.delete_event(event_id, send_updates=send_updates)
     except Exception as error:
-        print(f"Error encountered when processing event {event}: %s" % error)
+        print(f"Error encountered when processing session {session}: %s" % error)
 
 
 
