@@ -3,8 +3,8 @@ import os, argparse, datetime
 import pprint
 
 import interfaces.zoom.ZoomInterface as ZoomInterface
+import CQORCcalendar
 
-from CQORCcalendar import Calendar
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import Trainers
@@ -38,7 +38,8 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 
 
 # get the courses from the working calendar in the Google spreadsheets
-courses = Calendar(config, args).get_courses()
+calendar = CQORCcalendar.Calendar(config, args)
+courses = calendar.get_courses()
 
 # keep only courses that start on the date listed
 if args.date:
@@ -65,6 +66,7 @@ for course in courses:
             webinars = zoom.get_webinars(date = start_time.date())
             if webinars:
                 webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
+                calendar.set_zoom_id(first_session['course_id'], webinar['id'])
 
         if args.update_webinar_panelists or args.update_webinar:
             panelists = zoom.get_panelists(webinar['id'])
@@ -130,5 +132,6 @@ for course in courses:
 #    except Exception as e:
 #        print(f"Error encountered when processing event {event}: \n\n{e}")
 
+calendar.update_spreadsheet()
 
 
