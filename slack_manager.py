@@ -139,13 +139,7 @@ for course in courses:
             else:
                 print(f"{slack.list_channel_scheduled_messages(slack_channel_name)}")
 
-        original_start_time = start_time
-        original_end_time = end_time
         if args.messages:
-            # events on two days
-            if start_time.date() != end_time.date():
-                duration = duration/2.
-
             magic_castle_link = slack.get_channel_bookmark_link(slack_channel_name, "Magic Castle")
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
@@ -159,15 +153,11 @@ for course in courses:
             messages = []
             for prefix in message_prefixes:
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
-                for date in set([start_time.date(), end_time.date()]):
-                    if date == original_start_time.date():
-                        start_time = original_start_time
-                        end_time = original_start_time + datetime.timedelta(hours=duration)
-                    elif date == original_end_time.date():
-                        start_time = original_end_time - datetime.timedelta(hours=duration)
-                        end_time = original_end_time
+                for session in course['sessions']:
+                    start_time = to_iso8061(session['start_date'])
+                    end_time = to_iso8061(session['end_date'])
 
-                    if date == original_start_time.date() or config['slack'][f'{prefix}_multidays'] == "True":
+                    if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
                         time = start_time
                         if f'{prefix}_offset_start' in config['slack']:
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
