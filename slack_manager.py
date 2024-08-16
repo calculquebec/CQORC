@@ -70,7 +70,7 @@ for course in courses:
         if not slack_channel_name:
             slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
             slack_channel_name = slack_channel_name.lower()
-            calendar.set_slack_channel(first_session['course_id'])
+            calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.create:
             if args.dry_run:
@@ -176,9 +176,10 @@ for course in courses:
                     slack.post_to_channel(slack_channel_name, message['message'], message['time'])
 
     except Exception as e:
-        print(f"Error encountered when processing event {event}: \n\n{e}")
+        print(f"Error encountered when processing course {course}: \n\n{e}")
 
 
-calendar.update_spreadsheet()
+if not args.dry_run:
+    calendar.update_spreadsheet()
 
 
