@@ -72,25 +72,6 @@ for course in courses:
             slack_channel_name = slack_channel_name.lower()
             calendar.set_slack_channel(first_session['course_id'])
 
-        attendees_keys = []
-        for role in ['instructor', 'host', 'assistants']:
-            for session in course['sessions']:
-                if session[role]:
-                    attendees_keys += session[role].split(',')
-        attendees = [trainers.slack_email(key) for key in attendees_keys]
-        attendees = list(set(attendees))
-
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = int(event['hours'])
-
-        if first_session['zoom_id']:
-            webinar = zoom.get_webinar(webinar_id = first_session['zoom_id'])
-        else:
-            webinar = zoom.get_webinars(date = start_time.date())
-            if webinar:
-                webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
-
         if args.create:
             if args.dry_run:
                 cmd = f"slack.create_channel({slack_channel_name})"
@@ -99,6 +80,14 @@ for course in courses:
                 slack.create_channel(slack_channel_name)
 
         if args.invites:
+            attendees_keys = []
+            for role in ['instructor', 'host', 'assistants']:
+                for session in course['sessions']:
+                    if session[role]:
+                        attendees_keys += session[role].split(',')
+            attendees = [trainers.slack_email(key) for key in attendees_keys]
+            attendees = list(set(attendees))
+
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
                 print(f"Dry-run: would run {cmd}")
@@ -106,6 +95,14 @@ for course in courses:
                 slack.invite_to_channel(slack_channel_name, attendees)
 
         if args.bookmarks:
+            if first_session['zoom_id']:
+                webinar = zoom.get_webinar(webinar_id = first_session['zoom_id'])
+            else:
+                start_time = to_iso8061(first_session['start_date'])
+                webinar = zoom.get_webinars(date = start_time.date())
+                if webinar:
+                    webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
+
             bookmarks = [
                 {'title': 'Magic Castle', 'link': f'https://{course_code.lower()}.calculquebec.cloud'}
                 ]
@@ -187,8 +184,6 @@ for course in courses:
                     print(f"Dry-run: would run {cmd}")
                 else:
                     slack.post_to_channel(slack_channel_name, message['message'], message['time'])
-
-
 
     except Exception as e:
         print(f"Error encountered when processing event {event}: \n\n{e}")
