@@ -37,50 +37,47 @@ zoom_user = config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
 
 
-# get the events from the working calendar in the Google spreadsheets
-events = Calendar(config, args).get_all_sessions()
+# get the courses from the working calendar in the Google spreadsheets
+courses = Calendar(config, args).get_courses()
 
-# keep only events on the date listed
+# keep only courses that start on the date listed
 if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+    courses = [courses for course in courses if args.date.date().isoformat() in course['sessions'][0]['start_date']]
 
-for event in events:
+for course in courses:
 #    try:
         # no course code, continue
-        if not 'code' in event:
+        first_session = course['sessions'][0]
+        if not 'code' in first_session:
             continue
 
-        date = to_iso8061(event['start_date']).date()
-        course_code = event['code']
-        locale = event['langue']
-        title = event['title']
+        date = to_iso8061(first_session['start_date']).date()
+        course_code = first_session['code']
+        locale = first_session['langue']
+        title = first_session['title']
 
-        attendees_keys = []
-        if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += event['host'].split(',')
-        if event['assistants']: attendees_keys += event['assistants'].split(',')
-        attendees = [trainers.zoom_email(key) for key in attendees_keys]
-        attendees = list(set(attendees))
+        start_time = to_iso8061(first_session['start_date'])
+        duration = sum([float(session['hours']) for session in courses['sessions'])
 
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = float(event['hours'])
-
-        webinars = zoom.get_webinars(date = start_time.date())
-        if webinars:
-            webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
+        if first_session['zoom_id']:
+            webinar = zoom.get_webinar(first_session['zoom_id'])
+        else:
+            webinars = zoom.get_webinars(date = start_time.date())
+            if webinars:
+                webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
 
         if args.update_webinar_panelists or args.update_webinar:
             panelists = zoom.get_panelists(webinar['id'])
-            for k in event['assistants'].split(',') + [event['instructor']] + event['host'].split(','):
-                key = k.strip()
-                if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
-                    zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
+            for session in course['sessions']:
+                for k in session['assistants'].split(',') + [session['instructor']] + session['host'].split(','):
+                    key = k.strip()
+                    if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
+                        zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
 
         if args.update_webinar_hosts or args.update_webinar:
             params = {}
             settings = {}
-            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in event['host'].split(',')])
+            settings['alternative_hosts'] = ','.join(set([trainers.zoom_email(k) for k in session['host'].split(',') for session in course['sessions']]))
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 
@@ -110,7 +107,6 @@ for event in events:
             pp.pprint(panelists)
 
         if args.show_webinar:
-            webinar = zoom.get_webinar(webinar['id'])
             pp = pprint.PrettyPrinter(indent=4)
             print("Webinar:")
             pp.pprint(webinar)
