@@ -12,9 +12,11 @@ from common import get_survey_link
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", help="Handle course specified by course_id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-#parser.add_argument("--create-webinar", default=False, action='store_true', help="Create webinar")
+parser.add_argument("--create-webinar", default=False, action='store_true', help="Create webinar")
+parser.add_argument("--delete-webinar", default=False, action='store_true', help="Delete webinar")
 parser.add_argument("--list-panelists", default=False, action='store_true', help="List panelists")
 parser.add_argument("--update-webinar", default=False, action='store_true', help="Update webinar settings, panelists and hosts")
 parser.add_argument("--update-webinar-hosts", default=False, action='store_true', help="Update webinar hosts")
@@ -44,6 +46,9 @@ courses = calendar.get_courses()
 # keep only courses that start on the date listed
 if args.date:
     courses = [courses for course in courses if args.date.date().isoformat() in course['sessions'][0]['start_date']]
+# keep only the course for the course_id specified
+if args.course_id:
+    courses = [calendar[args.course_id]]
 
 for course in courses:
 #    try:
@@ -57,8 +62,18 @@ for course in courses:
         locale = first_session['langue']
         title = first_session['title']
 
-        start_time = to_iso8061(first_session['start_date'])
-        duration = sum([float(session['hours']) for session in courses['sessions'])
+        # for multi-session courses, the duration of the webinar must be from the start to the end
+        start_time = min([to_iso8061(session['start_date']) for session in course['sessions']])
+        end_time = max([to_iso8061(session['end_date']) for session in course['sessions']])
+        duration = (end_time - start_time).total_seconds()/3600
+
+        if args.create_webinar:
+            if first_session['zoom_id']:
+                print(f"Zoom ID already exists for this session {first_session['zoom_id']}, not creating")
+            else:
+                webinar = zoom.create_webinar(first_session['title'], duration, start_time.date(), start_time.time())
+                if webinar and 'id' in webinar:
+                    calendar.set_zoom_id(first_session['course_id'], webinar['id'])
 
         if first_session['zoom_id']:
             webinar = zoom.get_webinar(first_session['zoom_id'])
@@ -67,6 +82,12 @@ for course in courses:
             if webinars:
                 webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
                 calendar.set_zoom_id(first_session['course_id'], webinar['id'])
+
+        if args.delete_webinar:
+            print(f"Deleting webinar {webinar['id']}")
+            zoom.delete_webinar(webinar['id'])
+            calendar.set_zoom_id(first_session['id'], '')
+            exit(0)
 
         if args.update_webinar_panelists or args.update_webinar:
             panelists = zoom.get_panelists(webinar['id'])
