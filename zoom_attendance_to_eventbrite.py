@@ -49,8 +49,29 @@ if args.verbose:
 
 zoom_participants = {p['user_email']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
 # calculating the total attendance duration for each attendee
-for r in participants_records:
-    zoom_participants[r['user_email']]['duration'] += r['duration']
+for email in zoom_participants.keys():
+    records = [r for r in participants_records if r['user_email'] == email]
+    # the participant joined multiple times, we need to combine them
+    if len(records) >= 1:
+        # Algorithm from https://medium.com/@saraswatp/solving-overlapping-intervals-with-python-the-merged-interval-problem-dcf16ad09190
+        # first, sort the records by join_time
+        records.sort(key=lambda x: x['join_time'])
+        merged_records = []
+        for record in records:
+            # If the list of merged records is empty or if the current record does not overlap with the previous one,
+            # simply add it to the merged list
+            if not merged_records or record['join_time'] > merged_records[-1]['leave_time']:
+                merged_records.append(record)
+            else:
+                # If the current interval overlaps with previous one, merge them
+                merged_records[-1]['leave_time'] = max(merged_records[-1]['leave_time'], record['leave_time'])
+                merged_records[-1]['duration'] = merged_records[-1]['leave_time'] - merged_records[-1]['join_time']
+
+        records = merged_records
+
+    # sum the duration of each records
+    zoom_participants[email]['duration'] = sum([r['duration'] for r in records])
+
 
 # retrieve the maximum duration
 mean_duration = mean([v['duration'] for k,v in zoom_participants.items()])
