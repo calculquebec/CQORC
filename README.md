@@ -3,7 +3,7 @@ CQORC: Calcul Québec One Ring Coordinator, lets you pop the cork and enjoy wine
 
 # Setup
 ## Installing the scripts
-After cloning the current repository, do the following: 
+After cloning the current repository, do the following:
 
 1. Create a virtual env.
 ```bash
@@ -17,36 +17,73 @@ pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+# Source spreadsheet
+The scripts in this repository all take a single Google Spreadsheet as input. Beside the header line, each line from the
+spreadsheet corresponds to one session of a course. Courses can have one or multiple sessions.
+The spreadsheet should have the following columns:
+| Column title | Description |
+| --- | --- |
+| course_id | Identifier of a course. Can be repeated if the course is composed of multiple sessions |
+| template | EventBrite ID of an event which is used as template for creating the event |
+| title | Title of the course. |
+| code | 6 character code for the course (i.e. PYT101) |
+| start_date | Start date and time of the session. |
+| end_date | End date and time of the session. |
+| instructor | Key identifying the instructor in the trainer database. |
+| host | Key identifying the host in the trainer database. |
+| assistants | Comma-separated list of keys identifying the teaching assistants in the trainer database. |
+| langue | Language of the course (FR/EN) |
+| hours | Duration of the session, in hours |
+| eventbrite_id | ID of the EventBrite event for the course. Will be filled by the scripts |
+| zoom_id | ID of the Zoom event for the course. Will be filled by the scripts |
+| slack_channel | Name of the Slack channel for the course. Will be filled by the scripts |
+| public_gcal_id | ID of the public Google Calendar event for the session. Will be filled by the scripts. |
+| private_gcal_id | ID of the private Google Calendar event for the session. Will be filled by the scripts |
+
+# Trainers database
+A "database" file containing the list of trainers is used. It is stored in YAML format. One entry for a trainer should
+look like:
+```
+Key:
+  firstname: First name of the trainer
+  lastname: Last name of the trainer
+  email: Email address of the trainer
+  home_institution: Home institution of the trainer
+  zoom_email: Email address associated with the trainer's Zoom account (if undefined, email is used)
+  slack_email: Email address associated with the trainer's Slack account (if undefined, email is used)
+  calendar_email: Email address associated with the trainer's prefered email for calendar invitations (if undefined, email is used)
+```
+
 # Configuring the scripts
-The scripts in this repository are designed to read and combine all `*.cfg` files in the directories specified by 
+The scripts in this repository are designed to read and combine all `*.cfg` files in the directories specified by
 environment variables `CQORC_CONFIG_DIR` and `CQORC_SECRETS_DIR`. Two directories are used so that you can split
 configuration files in a public and a private repository. You can choose to use a single `*.cfg` file, or use as many
 as you would like. In the sections below, `[email]` identifies that the parameters below are in the `[email]` section.
 
 ## Configuring authentication parameters
-### `[email]` 
+### `[email]`
 This section is used to authenticate against a Google Gmail account to send certificates. See https://knowledge.workspace.google.com/kb/how-to-create-app-passwords-000009237
 for more information on creating an app password.
 | Key | Description |
 | `user` | Email address of the account to use to send emails |
 | `password` | Password of the account to use to send emails. We recommend creating an app password for this. |
 
-### `[eventbrite]` 
+### `[eventbrite]`
 This section is used to interact with EventBrite. See https://www.eventbrite.com/platform/docs/authentication for more information
-about getting your private token. The values are: 
+about getting your private token. The values are:
 | Key    | Description |
 | ------ | ----------------------------------------- |
-| `api_key` | Your private token | 
+| `api_key` | Your private token |
 | `organization_id` | The ID of the organization which will host your events |
 
-### `[slack]` 
+### `[slack]`
 This section is used to interact with Slack. It uses a bot token. See https://api.slack.com/tutorials/tracks/getting-a-token
 for more information on bot tokens. The values are:
 | Key    | Description |
 | ------ | ----------------------------------------- |
 | `bot_token` | The bot token to use |
 
-### `[zoom]` 
+### `[zoom]`
 For Zoom, you will want to create a Server-to-Server OAuth app. More information on this here: https://developers.zoom.us/docs/internal-apps/s2s-oauth/
 This will give you an Account ID, Client ID and Client Secret, which you will need. The values for the configuration section are:
 | Key    | Description |
@@ -56,9 +93,9 @@ This will give you an Account ID, Client ID and Client Secret, which you will ne
 | `client_secret` | The client secret |
 | `user` | The email of the user who will own the webinars |
 
-### `[google]` 
+### `[google]`
 Google APIs are used for accessing Google Sheets, Google Drive and Google Calendar. When the scripts which use such API are first called,
-it will open a browser asking you to authorize the application to use some scopes within each. It will save the authorization in a local 
+it will open a browser asking you to authorize the application to use some scopes within each. It will save the authorization in a local
 json file. This file is named based on the following configuration parameter:
 | Key    | Description |
 | ------ | ----------------------------------------- |
@@ -66,10 +103,8 @@ json file. This file is named based on the following configuration parameter:
 
 It will also save tokens for each API that is used, `token_calendar_v3.json`, `token_drive_v3.json`, `token_sheets_v4.json`. The client
 secret file identifies the application, while the token files are proof that you have given that application the permission to access
-some of the data. Once these JSON files are generated, you could share them internally. 
+some of the data. Once these JSON files are generated, you could share them internally.
 
 ## Configuring script behavior
 TODO
 
-## Trainers database
-TODO
