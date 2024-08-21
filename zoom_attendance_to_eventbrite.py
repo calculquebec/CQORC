@@ -8,6 +8,15 @@ import interfaces.slack.SlackInterface as SlackInterface
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import Trainers
+from statistics import mean
+
+
+def stringify_dict_ordered_by_name(d):
+    s = ""
+    for k in sorted(d.keys(), key=str.casefold):
+        s += f"{k}:{d[k]}\n"
+    return s
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
@@ -16,6 +25,7 @@ parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Ge
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--noslack", default=False, action='store_true', help="Do not post to Slack")
+parser.add_argument("--verbose", default=False, action='store_true', help="Print lists of users")
 args = parser.parse_args()
 
 # read configuration files
@@ -32,24 +42,43 @@ elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
 if len(webinars) != 1:
-    print(f"Error, number of webinars found is not 1: {len(webinar)}")
+    print(f"Error, number of webinars found is not 1: {len(webinars)}")
     exit(1)
 
 # get the list of participants to the webinar
 webinar = webinars[0]
 # each participant can be listed more than once, these are records
 participants_records = zoom.get_webinar_participants(webinar['id'])
+if args.verbose:
+    print("Raw Zoom records:")
+    for v in participants_records:
+        print(f"{v}")
+    print("===============")
+
 zoom_participants = {p['user_email']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
 # calculating the total attendance duration for each attendee
 for r in participants_records:
     zoom_participants[r['user_email']]['duration'] += r['duration']
 
 # retrieve the maximum duration
-max_duration = max([v['duration'] for k,v in zoom_participants.items()])
+mean_duration = mean([v['duration'] for k,v in zoom_participants.items()])
 
 # keep only attendees which have attended for more than a threshold
 threshold = float(global_config['script.presence']['presence_threshold'])
-zoom_participants = {k: v for k,v in zoom_participants.items() if v['duration'] > threshold * max_duration}
+if args.verbose:
+    print("List from Zoom before filtering:")
+    for k,v in zoom_participants.items():
+        print(f"{k}:{v}")
+    print("===============")
+    print(f"Max duration:{mean_duration}")
+    print(f"Threshold duration:{threshold * mean_duration}")
+
+zoom_participants = {k: v for k,v in zoom_participants.items() if v['duration'] > threshold * mean_duration}
+if args.verbose:
+    print("List from Zoom after filtering:")
+    for k,v in zoom_participants.items():
+        print(f"{k}:{v}")
+    print("===============")
 
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
@@ -59,10 +88,15 @@ if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
+    todays_events = []
     for e in eb_events:
         if args.date and to_iso8061(e['start']['local']).date() == to_iso8061(args.date).date():
-            eb_event = e
-            break
+            todays_events += [e]
+        if len(todays_events) > 1:
+            print(f"Error, number of EventBrite event found is not 1: {len(todays_events)}, use --zoom_id and --eventbrite_id")
+            exit(1)
+    eb_event = todays_events[0]
+
 
 if not eb_event:
     print("Error, no EventBrite event found")
@@ -70,6 +104,13 @@ if not eb_event:
 
 eb_registrants = eb.get_event_attendees_by_status(eb_event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
 eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['email', 'first_name', 'last_name', 'status', 'name'])
+
+if args.verbose:
+    print("List from EventBrite:")
+    for k,v in eb_attendees.items():
+        print(f"{k}:{v}")
+    print("===============")
+
 
 # match by email
 missing_in_eb = [email for email in zoom_participants.keys() if email not in eb_attendees.keys()]
@@ -103,23 +144,28 @@ ignored_email_domains = global_config['script.presence']['ignored_email_domains'
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
-
 if missing_in_eb:
     message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email not in eb_registrants:
-            message += f"{email}: {zoom_participants[email]['name']}\n"
+            tmp_dict[zoom_participants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
     message += "\nThe following people attended the Zoom event, but are not checked in in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if should_not_in_eb:
     message += "\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom:\n"
+    tmp_dict = {}
     for email in should_not_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if not message:
     message = "No mistake found in EventBrite checked-in attendees"

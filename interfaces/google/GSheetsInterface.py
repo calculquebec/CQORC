@@ -50,7 +50,33 @@ class GSheetsInterface(GoogleInterface):
             return error
 
 
-    def update_values(self, spreadsheet_id, range_name, values):
+    def get_values(self, spreadsheet_id, range_name, sheet_name=None):
+        # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/get
+        # https://developers.google.com/sheets/api/guides/values#python
+        """
+        Creates the batch_update the user has access to.
+        """
+        try:
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
+            result = (
+                self.get_service().spreadsheets()
+                    .values()
+                    .get(
+                        spreadsheetId=spreadsheet_id,
+                        range=range_name,
+                )
+                .execute()
+            )
+            rows = result.get("values", [])
+            self.logger.info(f"{rows}")
+            return rows
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return error
+
+
+    def update_values(self, spreadsheet_id, range_name, values, sheet_name=None):
         # https://developers.google.com/sheets/api/guides/values
         """
         Creates the batch_update the user has access to.
@@ -58,6 +84,8 @@ class GSheetsInterface(GoogleInterface):
         try:
             value_input_option = "USER_ENTERED"
             body = {"values": values}
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
             result = (
                 self.get_service().spreadsheets()
                     .values()
@@ -70,6 +98,32 @@ class GSheetsInterface(GoogleInterface):
                 .execute()
             )
             self.logger.info(f"{result.get('updatedCells')} cells updated.")
+            return result
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            return error
+
+
+    def append_values(self, spreadsheet_id, range_name, values, sheet_name=None):
+        # https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
+        # https://developers.google.com/sheets/api/guides/values
+        try:
+            value_input_option = "USER_ENTERED"
+            body = {"values": values}
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
+            result = (
+                self.get_service().spreadsheets()
+                    .values()
+                    .append(
+                        spreadsheetId=spreadsheet_id,
+                        range=range_name,
+                        valueInputOption=value_input_option,
+                        body=body,
+                )
+                .execute()
+            )
+            self.logger.info(f"{result.get('updatedCells')} cells appended.")
             return result
         except HttpError as error:
             self.logger.error(f"An error occurred: {error}")
@@ -143,11 +197,14 @@ def main():
     credentials_file_path = os.path.join(secrets_dir, credentials_file)
     gsheets = GSheetsInterface(credentials_file_path)
     content = [['1', '2'], ['3', '4', '5', '8'], ['x']]
-    folder_id = config['script.usernames']['google_drive_folder_id']
-    gsheets.create_spreadsheet("Ceci est un test", content, folder_id)
-    dst = "1upq1zrendsgQLumDwIfR11Ck9xol4uKkc5BeZ5Pt4gA"
-    src = "1btl9MFm4bXCkLM3yaHkm901phTEAwWEr6y9zP6oH9L0"
-    gsheets.copy_protection(src, dst)
+#    folder_id = config['script.usernames']['google_drive_folder_id']
+#    gsheets.create_spreadsheet("Ceci est un test", content, folder_id)
+#    dst = "1upq1zrendsgQLumDwIfR11Ck9xol4uKkc5BeZ5Pt4gA"
+#    src = "1btl9MFm4bXCkLM3yaHkm901phTEAwWEr6y9zP6oH9L0"
+#    gsheets.copy_protection(src, dst)
+
+#    values = [["A", "2", "3"]]
+#    gsheets.append_values(dst, "A1", values, sheet_name='2023-24')
 
 
 
