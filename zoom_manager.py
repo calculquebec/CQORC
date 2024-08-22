@@ -31,9 +31,6 @@ args = parser.parse_args()
 config = get_config(args)
 trainers = Trainers(config['global']['trainers_db'])
 
-secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
-credentials_file = config['google']['credentials_file']
-credentials_file_path = os.path.join(secrets_dir, credentials_file)
 timezone = config['google.calendar'].get('timezone', config['global']['timezone'])
 zoom_user = config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
@@ -133,22 +130,6 @@ for course in courses:
             pp = pprint.PrettyPrinter(indent=4)
             print("Webinar:")
             pp.pprint(webinar)
-
-#        if args.create_webinar:
-#            if args.dry_run:
-#                cmd = f"slack.create_channel({slack_channel_name})"
-#                print(f"Dry-run: would run {cmd}")
-#            else:
-#                slack.create_channel(slack_channel_name)
-
-#        if args.invites:
-#            if args.dry_run:
-#                cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
-#                print(f"Dry-run: would run {cmd}")
-#            else:
-#                slack.invite_to_channel(slack_channel_name, attendees)
-
-
 
 #    except Exception as e:
 #        print(f"Error encountered when processing event {event}: \n\n{e}")
