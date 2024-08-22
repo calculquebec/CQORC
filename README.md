@@ -135,3 +135,24 @@ Most of the above scripts have some common arguments which can be specified:
 | `--update` | Updates events/webinar/channel |
 | `--delete` | Deletes events/webinar |
 
+
+# Typical order to run the scripts
+## At the beginning of the term
+Since EventBrite events are linked to Zoom events, and public Google calendar events display the EventBrite registration, you want to run the scripts in this order:
+1. `zoom_manager.py` 
+2. `eventbrite_manager.py`
+3. `public_gcal_events.py` 
+4. `slack_manager.py` 
+5. `gcal_events.py` 
+
+## The day before each event
+Once the registration period on EventBrite is closed, one can use the script `create_usernames_spreadsheet.py` to create a spreadsheet with usernames for the
+Magic Castle
+
+## After the event
+After the event, one can run the script `zoom_attendance_to_eventbrite.py` to reconcile attendance between the Zoom participation records and the EventBrite
+attendees list. 
+
+Then, one can use the `create_certificate.py` script to create and send certificates to attendees. 
+
+
