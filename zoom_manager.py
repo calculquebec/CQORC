@@ -3,18 +3,20 @@ import os, argparse, datetime
 import pprint
 
 import interfaces.zoom.ZoomInterface as ZoomInterface
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
-from common import get_events_from_sheet_calendar
 from common import Trainers
 from common import get_survey_link
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", help="Handle course specified by course_id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-#parser.add_argument("--create-webinar", default=False, action='store_true', help="Create webinar")
+parser.add_argument("--create-webinar", default=False, action='store_true', help="Create webinar")
+parser.add_argument("--delete-webinar", default=False, action='store_true', help="Delete webinar")
 parser.add_argument("--list-panelists", default=False, action='store_true', help="List panelists")
 parser.add_argument("--update-webinar", default=False, action='store_true', help="Update webinar settings, panelists and hosts")
 parser.add_argument("--update-webinar-hosts", default=False, action='store_true', help="Update webinar hosts")
@@ -29,58 +31,73 @@ args = parser.parse_args()
 config = get_config(args)
 trainers = Trainers(config['global']['trainers_db'])
 
-secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
-credentials_file = config['google']['credentials_file']
-credentials_file_path = os.path.join(secrets_dir, credentials_file)
 timezone = config['google.calendar'].get('timezone', config['global']['timezone'])
 zoom_user = config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
 
 
-# get the events from the working calendar in the Google spreadsheets
-events = get_events_from_sheet_calendar(config, args)
+# get the courses from the working calendar in the Google spreadsheets
+calendar = CQORCcalendar.Calendar(config, args)
+courses = calendar.get_courses()
 
-# keep only events on the date listed
+# keep only courses that start on the date listed
 if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+    courses = [courses for course in courses if args.date.date().isoformat() in course['sessions'][0]['start_date']]
+# keep only the course for the course_id specified
+if args.course_id:
+    courses = [calendar[args.course_id]]
 
-for event in events:
+for course in courses:
 #    try:
         # no course code, continue
-        if not 'code' in event:
+        first_session = course['sessions'][0]
+        if not 'code' in first_session:
             continue
 
-        date = to_iso8061(event['start_date']).date()
-        course_code = event['code']
-        locale = event['langue']
-        title = event['title']
+        date = to_iso8061(first_session['start_date']).date()
+        course_code = first_session['code']
+        locale = first_session['langue']
+        title = first_session['title']
 
-        attendees_keys = []
-        if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += event['host'].split(',')
-        if event['assistants']: attendees_keys += event['assistants'].split(',')
-        attendees = [trainers.zoom_email(key) for key in attendees_keys]
-        attendees = list(set(attendees))
+        # for multi-session courses, the duration of the webinar must be from the start to the end
+        start_time = min([to_iso8061(session['start_date']) for session in course['sessions']])
+        end_time = max([to_iso8061(session['end_date']) for session in course['sessions']])
+        duration = (end_time - start_time).total_seconds()/3600
 
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = float(event['hours'])
+        if args.create_webinar:
+            if first_session['zoom_id']:
+                print(f"Zoom ID already exists for this session {first_session['zoom_id']}, not creating")
+            else:
+                webinar = zoom.create_webinar(first_session['title'], duration, start_time.date(), start_time.time())
+                if webinar and 'id' in webinar:
+                    calendar.set_zoom_id(first_session['course_id'], webinar['id'])
 
-        webinars = zoom.get_webinars(date = start_time.date())
-        if webinars:
-            webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
+        if first_session['zoom_id']:
+            webinar = zoom.get_webinar(first_session['zoom_id'])
+        else:
+            webinars = zoom.get_webinars(date = start_time.date())
+            if webinars:
+                webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
+                calendar.set_zoom_id(first_session['course_id'], webinar['id'])
+
+        if args.delete_webinar:
+            print(f"Deleting webinar {webinar['id']}")
+            zoom.delete_webinar(webinar['id'])
+            calendar.set_zoom_id(first_session['course_id'], '')
+            exit(0)
 
         if args.update_webinar_panelists or args.update_webinar:
             panelists = zoom.get_panelists(webinar['id'])
-            for k in event['assistants'].split(',') + [event['instructor']] + event['host'].split(','):
-                key = k.strip()
-                if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
-                    zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
+            for session in course['sessions']:
+                for k in session['assistants'].split(',') + [session['instructor']] + session['host'].split(','):
+                    key = k.strip()
+                    if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
+                        zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
 
         if args.update_webinar_hosts or args.update_webinar:
             params = {}
             settings = {}
-            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in event['host'].split(',')])
+            settings['alternative_hosts'] = ','.join(set([trainers.zoom_email(k) for k in session['host'].split(',') for session in course['sessions']]))
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 
@@ -110,29 +127,13 @@ for event in events:
             pp.pprint(panelists)
 
         if args.show_webinar:
-            webinar = zoom.get_webinar(webinar['id'])
             pp = pprint.PrettyPrinter(indent=4)
             print("Webinar:")
             pp.pprint(webinar)
 
-#        if args.create_webinar:
-#            if args.dry_run:
-#                cmd = f"slack.create_channel({slack_channel_name})"
-#                print(f"Dry-run: would run {cmd}")
-#            else:
-#                slack.create_channel(slack_channel_name)
-
-#        if args.invites:
-#            if args.dry_run:
-#                cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
-#                print(f"Dry-run: would run {cmd}")
-#            else:
-#                slack.invite_to_channel(slack_channel_name, attendees)
-
-
-
 #    except Exception as e:
 #        print(f"Error encountered when processing event {event}: \n\n{e}")
 
+calendar.update_spreadsheet()
 
 

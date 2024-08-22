@@ -241,8 +241,51 @@ class EventbriteInterface(eb.Eventbrite):
             "purpose": "listing"
         }
 
-        get_structed_content = self._raise_or_ok(self.get(f"/events/{event_id}/structured_content/"))
-        version = int(get_structed_content["page_version_number"])
+        get_structured_content = self._raise_or_ok(self.get(f"/events/{event_id}/structured_content/"))
+        version = int(get_structured_content["page_version_number"])
+
+        return self._raise_or_ok(self.post(f"/events/{event_id}/structured_content/{version+1}/", data=obj))
+
+    # Note: This merely creates a generic webinar, not a Zoom connection
+    def update_webinar_url(self, event_id, webinar_url):
+        """
+        Update the event webinar module.
+
+        Parameters
+        ----------
+        event_id: Event id to update
+        webinar_url: Webinar URL
+
+        Returns
+        -------
+        None
+        """
+        obj = {
+            "modules": [{
+                "type": "webinar",
+                "data": {
+                    "webinar_url":{
+                        "text": "my webinar",
+                        "url": f"{webinar_url}"
+                    },
+                    "image":{
+                        "type":"image",
+                        "image_id":"63131771"
+                    },
+                    "title":{
+                        "text": "Optional Title",
+                    },
+                    "instructions":{
+                        "text": "Instructions to join the webinar",
+                    }
+                }
+                }],
+            "publish": "true",
+            "purpose": "digital_content"
+        }
+
+        get_structured_content = self._raise_or_ok(self.get(f"/events/{event_id}/structured_content/?purpose=digital_content"))
+        version = int(get_structured_content["page_version_number"])
 
         return self._raise_or_ok(self.post(f"/events/{event_id}/structured_content/{version+1}/", data=obj))
 
