@@ -64,7 +64,7 @@ for session in sessions:
     try:
         if len(session['code']):
             # Read the description from the repo
-            with open(os.path.join(config["descriptions"]["local_repo"], f"{session['code']}-{session['langue']}.yaml")) as f:
+            with open(os.path.join(config["descriptions"]["local_repo"], f"{session['code']}-{session['language']}.yaml")) as f:
                 event_description = yaml.safe_load(f)
         else:
             event_description = None
@@ -100,7 +100,7 @@ for session in sessions:
         if eb_event:
             title = eb_event['name']['text']
 
-        if session['langue'] == "FR":
+        if session['language'] == "FR":
             description = f"""Inscriptions: {registration_url}
 
 {summary}
