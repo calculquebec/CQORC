@@ -128,7 +128,7 @@ if __name__ == "__main__":
 
         if first_session['code']:
             # Read the description from the repo
-            with open(os.path.join(config["descriptions"]["local_repo"], f"{first_session['code']}-{first_session['langue']}.yaml")) as f:
+            with open(os.path.join(config["descriptions"]["local_repo"], f"{first_session['code']}-{first_session['language']}.yaml")) as f:
                 event_description = yaml.safe_load(f)
         else:
             event_description = None

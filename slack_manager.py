@@ -60,7 +60,7 @@ for course in courses:
 
         date = to_iso8061(first_session['start_date']).date()
         course_code = first_session['code']
-        locale = first_session['langue']
+        locale = first_session['language']
         title = first_session['title']
 
         survey_link = get_survey_link(config, locale, title, date)
