@@ -32,7 +32,7 @@ The spreadsheet should have the following columns:
 | instructor | Key identifying the instructor in the trainer database. |
 | host | Key identifying the host in the trainer database. |
 | assistants | Comma-separated list of keys identifying the teaching assistants in the trainer database. |
-| langue | Language of the course (FR/EN) |
+| language | Language of the course (FR/EN) |
 | hours | Duration of the session, in hours |
 | eventbrite_id | ID of the EventBrite event for the course. Will be filled by the scripts |
 | zoom_id | ID of the Zoom event for the course. Will be filled by the scripts |
