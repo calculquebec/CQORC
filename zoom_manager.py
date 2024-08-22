@@ -15,14 +15,14 @@ parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Ge
 parser.add_argument("--course_id", help="Handle course specified by course_id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--create-webinar", default=False, action='store_true', help="Create webinar")
-parser.add_argument("--delete-webinar", default=False, action='store_true', help="Delete webinar")
+parser.add_argument("--create", default=False, action='store_true', help="Create webinar")
+parser.add_argument("--delete", default=False, action='store_true', help="Delete webinar")
 parser.add_argument("--list-panelists", default=False, action='store_true', help="List panelists")
-parser.add_argument("--update-webinar", default=False, action='store_true', help="Update webinar settings, panelists and hosts")
-parser.add_argument("--update-webinar-hosts", default=False, action='store_true', help="Update webinar hosts")
-parser.add_argument("--update-webinar-panelists", default=False, action='store_true', help="Update webinar panelists")
-parser.add_argument("--update-webinar-settings", default=False, action='store_true', help="Update webinar settings")
-parser.add_argument("--show-webinar", default=False, action='store_true', help="Show webinar")
+parser.add_argument("--update", default=False, action='store_true', help="Update webinar settings, panelists and hosts")
+parser.add_argument("--update-hosts", default=False, action='store_true', help="Update webinar hosts")
+parser.add_argument("--update-panelists", default=False, action='store_true', help="Update webinar panelists")
+parser.add_argument("--update-settings", default=False, action='store_true', help="Update webinar settings")
+parser.add_argument("--show", default=False, action='store_true', help="Show webinar")
 parser.add_argument("--invites", default=False, action='store_true', help="Invite trainers")
 parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run")
 args = parser.parse_args()
@@ -64,7 +64,7 @@ for course in courses:
         end_time = max([to_iso8061(session['end_date']) for session in course['sessions']])
         duration = (end_time - start_time).total_seconds()/3600
 
-        if args.create_webinar:
+        if args.create:
             if first_session['zoom_id']:
                 print(f"Zoom ID already exists for this session {first_session['zoom_id']}, not creating")
             else:
@@ -80,13 +80,13 @@ for course in courses:
                 webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
                 calendar.set_zoom_id(first_session['course_id'], webinar['id'])
 
-        if args.delete_webinar:
+        if args.delete:
             print(f"Deleting webinar {webinar['id']}")
             zoom.delete_webinar(webinar['id'])
             calendar.set_zoom_id(first_session['course_id'], '')
             exit(0)
 
-        if args.update_webinar_panelists or args.update_webinar:
+        if args.update_panelists or args.update:
             panelists = zoom.get_panelists(webinar['id'])
             for session in course['sessions']:
                 for k in session['assistants'].split(',') + [session['instructor']] + session['host'].split(','):
@@ -94,14 +94,14 @@ for course in courses:
                     if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
                         zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
 
-        if args.update_webinar_hosts or args.update_webinar:
+        if args.update_hosts or args.update:
             params = {}
             settings = {}
             settings['alternative_hosts'] = ','.join(set([trainers.zoom_email(k) for k in session['host'].split(',') for session in course['sessions']]))
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 
-        if args.update_webinar_settings or args.update_webinar:
+        if args.update_settings or args.update:
             params = {}
             settings = {}
             settings['attendees_and_panelists_reminder_email_notification'] = {'enable': True, 'type': 1}
@@ -126,7 +126,7 @@ for course in courses:
             print("Panelists:")
             pp.pprint(panelists)
 
-        if args.show_webinar:
+        if args.show:
             pp = pprint.PrettyPrinter(indent=4)
             print("Webinar:")
             pp.pprint(webinar)
