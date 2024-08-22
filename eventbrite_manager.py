@@ -7,6 +7,7 @@ from git import Repo
 from bs4 import BeautifulSoup
 import configparser
 from glob import glob
+#import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.eventbrite.EventbriteInterface as eventbrite
 from common import UTC_FMT, valid_date, to_iso8061, ISO_8061_FORMAT, Trainers, get_config
 import CQORCcalendar
@@ -57,24 +58,28 @@ def update_html(description, content, instructor_name):
 
     # Update them
     # summary.string = summary.string.replace("[[SUMMARY]]", content["summary"])
-    desc.string = desc.string.replace("[[DESCRIPTION]]", content["description"])
+    if desc:
+        desc.string = desc.string.replace("[[DESCRIPTION]]", content["description"])
 
-    new_prereqs = soup.new_tag("ul")
-    for i in content["prerequisites"]:
-        new_li = soup.new_tag("li")
-        new_li.string = i
-        new_prereqs.append(new_li)
-    prerequis.replace_with(new_prereqs)
+    if prerequis:
+        new_prereqs = soup.new_tag("ul")
+        for i in content["prerequisites"]:
+            new_li = soup.new_tag("li")
+            new_li.string = i
+            new_prereqs.append(new_li)
+        prerequis.replace_with(new_prereqs)
 
-    new_plan = soup.new_tag("ul")
-    for i in content["plan"]:
-        new_li = soup.new_tag("li")
-        new_li.string = i
-        new_plan.append(new_li)
-    plan.replace_with(new_plan)
+    if plan:
+        new_plan = soup.new_tag("ul")
+        for i in content["plan"]:
+            new_li = soup.new_tag("li")
+            new_li.string = i
+            new_plan.append(new_li)
+        plan.replace_with(new_plan)
 
     # Update instructor
-    instructor.string = instructor.string.replace("[[INSTRUCTOR]]", instructor_name)
+    if instructor:
+        instructor.string = instructor.string.replace("[[INSTRUCTOR]]", instructor_name)
 
     return soup
 
@@ -98,6 +103,9 @@ if __name__ == "__main__":
 
     config = get_config(args)
     trainers = Trainers(config['global']['trainers_db'])
+    #zoom_user = config['zoom']['user']
+    #zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
+
     # no need to actualize the repo if we are not creating or updating the event
     if args.create or args.update:
         actualize_repo(config["descriptions"]["repo_url"], config["descriptions"]["local_repo"])
@@ -161,6 +169,12 @@ if __name__ == "__main__":
             hours = int(config["eventbrite"]["close_hours_before_event"])
             eb.update_tickets(eventid, "", (to_iso8061(first_session['start_date']) - timedelta(hours=hours)).astimezone(timezone.utc).strftime(UTC_FMT))
             print(f'Successfully updated {eventid} ticket classes')
+
+            # Update Zoom webinar
+            # Note: This merely creates a generic webinar, not a Zoom connection
+#            if first_session['zoom_id']:
+#                webinar = zoom.get_webinar(first_session['zoom_id'])
+#                eb.update_webinar_url(eventid, webinar['join_url'])
 
         # Delete the event
         if args.delete:
