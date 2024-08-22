@@ -4,16 +4,26 @@ import os, argparse, datetime
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import Trainers
 from statistics import mean
 
+
+def stringify_dict_ordered_by_name(d):
+    s = ""
+    for k in sorted(d.keys(), key=str.casefold):
+        s += f"{k}:{d[k]}\n"
+    return s
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
 parser.add_argument("--zoom_id", help="EventBrite event id")
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", help="ID of the course")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
 parser.add_argument("--noslack", default=False, action='store_true', help="Do not post to Slack")
@@ -23,6 +33,12 @@ args = parser.parse_args()
 # read configuration files
 global_config = get_config(args)
 
+# get the events from the working calendar in the Google spreadsheets
+calendar = CQORCcalendar.Calendar(config, args)
+course = None
+if args.course_id:
+    course = calendar[args.course_id]
+
 # initialize Zoom interface
 zoom_user = global_config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(global_config['zoom']['account_id'], global_config['zoom']['client_id'], global_config['zoom']['client_secret'], global_config['global']['timezone'], zoom_user)
@@ -30,11 +46,13 @@ zoom = ZoomInterface.ZoomInterface(global_config['zoom']['account_id'], global_c
 webinars = []
 if args.zoom_id:
     webinars = zoom.get_webinars(ids = [int(args.zoom_id)])
+elif course:
+    webinars = zoom.get_webinar(ids = [int(course[0]['zoom_id'])])
 elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
 if len(webinars) != 1:
-    print(f"Error, number of webinars found is not 1: {len(webinar)}")
+    print(f"Error, number of webinars found is not 1: {len(webinars)}")
     exit(1)
 
 # get the list of participants to the webinar
@@ -78,6 +96,8 @@ eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 eb_event = None
 if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
+elif course:
+    eb_event = eb.get_event(course[0]['eventbrite_id'])
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
     todays_events = []
@@ -136,23 +156,28 @@ ignored_email_domains = global_config['script.presence']['ignored_email_domains'
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
-
 if missing_in_eb:
     message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email not in eb_registrants:
-            message += f"{email}: {zoom_participants[email]['name']}\n"
+            tmp_dict[zoom_participants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
     message += "\nThe following people attended the Zoom event, but are not checked in in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if should_not_in_eb:
     message += "\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom:\n"
+    tmp_dict = {}
     for email in should_not_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if not message:
     message = "No mistake found in EventBrite checked-in attendees"

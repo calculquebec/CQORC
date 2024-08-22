@@ -67,22 +67,21 @@ class ZoomInterface:
         return headers
 
 
-    def create_meeting(self, topic, duration, start_date, start_time):
+    def create_meeting(self, topic, duration, start_date, start_time, settings = {}):
         headers = self.get_authorization_header()
 
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetingCreate
         payload = {
             "topic": topic,
-            #"schedule_for": "user@a",
-            #"alternative_hosts": "a,b,c,d",
             "duration": duration,
-            #"host_video": true,
-            #"jbh_time": 5,
-            #"join_before_host": "true",
             'start_time': f'{start_date}T{start_time}',
             "timezone": self.timezone,
             "type": 2,
         }
+
+        # optionally define various settings
+        for key, value in settings.items():
+            payload[key] = value
 
         resp = requests.post(f"{self.api_base_url}/users/{self.user}/meetings",
                              headers=headers,
@@ -91,17 +90,20 @@ class ZoomInterface:
         if resp.status_code!=201:
             print("Unable to generate meeting link")
         response_data = resp.json()
+        return response_data
 
-        content = {
-                    "meeting_url": response_data["join_url"],
-                    "password": response_data["password"],
-                    "meetingTime": response_data["start_time"],
-                    "purpose": response_data["topic"],
-                    "duration": response_data["duration"],
-                    "message": "Success",
-                    "status":1
-        }
-        return content
+    def delete_meeting(self, meeting_id):
+        headers = self.get_authorization_header()
+
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/meetingDelete
+        resp = requests.delete(f"{self.api_base_url}/meetings/{meeting_id}",
+                               headers=headers)
+
+        if resp.status_code!=204:
+            print("Unable to delete meeting")
+            print(f"{resp}")
+
+        return
 
     def get_meetings(self):
         # to be done
@@ -113,10 +115,45 @@ class ZoomInterface:
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/reportMeetingParticipants
         pass
 
-    def create_webinar(self):
-        # to be done
+
+    def create_webinar(self, topic, duration, start_date, start_time, settings = {}):
+        headers = self.get_authorization_header()
+
         # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarCreate
-        pass
+        payload = {
+            "topic": topic,
+            "duration": duration,
+            'start_time': f'{start_date}T{start_time}',
+            "timezone": self.timezone,
+            "type": 5,
+        }
+
+        # optionally define various settings
+        for key, value in settings.items():
+            payload[key] = value
+
+        resp = requests.post(f"{self.api_base_url}/users/{self.user}/webinars",
+                             headers=headers,
+                             json=payload)
+
+        if resp.status_code!=201:
+            print("Unable to generate webinar link")
+        response_data = resp.json()
+        return response_data
+
+    def delete_webinar(self, webinar_id):
+        headers = self.get_authorization_header()
+
+        # https://developers.zoom.us/docs/api/rest/reference/zoom-api/methods/#operation/webinarDelete
+        print(f"{self.api_base_url}/webinars/{webinar_id}")
+        resp = requests.delete(f"{self.api_base_url}/webinars/{webinar_id}",
+                               headers=headers)
+
+        if resp.status_code!=204:
+            print("Unable to delete webinar")
+            print(f"{resp}")
+
+        return
 
 
     def add_panelist(self, webinar_id, email:str, name:str):
@@ -300,13 +337,28 @@ def main():
     '''
     print(str(zoom.create_meeting("Meeting test", "60", "2023-11-10", "13:00:00")))
     '''
-
+    # Create one webinar
+    '''
+    webinar = zoom.create_webinar("Meeting test", "60", "2024-10-10", "13:00:00")
+    print(f"Created:{webinar}")
+    '''
     # Overview of all webinars : ID Local-Start-Time End-of-topic
     webinars = zoom.get_webinars()
     print(f'{len(webinars)} webinar(s):')
     print(f"{'Webinar-ID':11} {'Date':10} {'Time':5}",
           'Session topic (last 48 characters)')
+    for w in webinars:
+        start_time = datetime.fromisoformat(w['start_time']).astimezone(tzinfo)
+        print(w['id'], str(start_time)[:-9], w['topic'][-48:])
 
+    '''
+    print(f"Deleting webinar {webinar['id']}")
+    zoom.delete_webinar(webinar['id'])
+    '''
+    webinars = zoom.get_webinars()
+    print(f'{len(webinars)} webinar(s):')
+    print(f"{'Webinar-ID':11} {'Date':10} {'Time':5}",
+          'Session topic (last 48 characters)')
     for w in webinars:
         start_time = datetime.fromisoformat(w['start_time']).astimezone(tzinfo)
         print(w['id'], str(start_time)[:-9], w['topic'][-48:])
