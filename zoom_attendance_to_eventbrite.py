@@ -11,6 +11,14 @@ from common import extract_course_code_from_title
 from common import Trainers
 from statistics import mean
 
+
+def stringify_dict_ordered_by_name(d):
+    s = ""
+    for k in sorted(d.keys(), key=str.casefold):
+        s += f"{k}:{d[k]}\n"
+    return s
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
 parser.add_argument("--zoom_id", help="EventBrite event id")
@@ -44,7 +52,7 @@ elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
 if len(webinars) != 1:
-    print(f"Error, number of webinars found is not 1: {len(webinar)}")
+    print(f"Error, number of webinars found is not 1: {len(webinars)}")
     exit(1)
 
 # get the list of participants to the webinar
@@ -148,23 +156,28 @@ ignored_email_domains = global_config['script.presence']['ignored_email_domains'
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
-
 if missing_in_eb:
     message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email not in eb_registrants:
-            message += f"{email}: {zoom_participants[email]['name']}\n"
+            tmp_dict[zoom_participants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
     message += "\nThe following people attended the Zoom event, but are not checked in in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if should_not_in_eb:
     message += "\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom:\n"
+    tmp_dict = {}
     for email in should_not_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if not message:
     message = "No mistake found in EventBrite checked-in attendees"

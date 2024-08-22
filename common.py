@@ -5,6 +5,8 @@ import yaml
 from git import Repo
 
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
+UTC_FMT = '%Y-%m-%dT%H:%M:%SZ'
+
 
 def to_iso8061(dt, tz=None):
     """

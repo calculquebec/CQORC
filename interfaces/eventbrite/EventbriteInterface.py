@@ -141,7 +141,6 @@ class EventbriteInterface(eb.Eventbrite):
         response = self.post(f"/events/{event_id}/copy/", data=obj)
         if response.ok:
             self.logger.debug(f"Created event {response['id']}")
-            print(f'Successfully created {response["name"]["text"]} {response["start"]["local"]} {response["end"]["local"]}')
         else:
             self.logger.error(f'Error creating event! Got {response}')
             raise Exception(response)
@@ -162,7 +161,7 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         None
         """
-        event = eb.get_event(event_id)
+        event = self.get_event(event_id)
         sales_start = self._to_iso8061(sales_start).astimezone(timezone.utc).strftime(self.UTC_FMT) if sales_start else ""
         sales_end = self._to_iso8061(sales_end if sales_end else event['start']['local']).astimezone(timezone.utc).strftime(self.UTC_FMT)
         ticket_classes_response = self._raise_or_ok(self.get(f"/events/{event_id}/ticket_classes/"))
@@ -175,8 +174,6 @@ class EventbriteInterface(eb.Eventbrite):
                 }
             }
             self._raise_or_ok(self.post(f"/events/{event_id}/ticket_classes/{ticket_class['id']}/", data=obj))
-
-        print(f'Successfully updated {event_id} ticket classes')
 
     def get_event_description(self, event_id):
         """
@@ -338,7 +335,7 @@ if __name__ == '__main__':
     lang = 'fr'
 
     # Test get template event
-    fr_template = eb.get_event(config['eventbrite.templates'][f'{lang}_event_id'])
+    fr_template = eb.get_event(112111795398)
 
     print(fr_template['name'])
     print('OK')
