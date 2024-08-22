@@ -108,3 +108,30 @@ some of the data. Once these JSON files are generated, you could share them inte
 ## Configuring script behavior
 TODO
 
+# Running the scripts
+Various scripts are provided in this repository:
+| Script | Description |
+| --- | --- |
+| `zoom_manager.py` | Creates, updates and deletes Zoom webinars, and invite trainers. |
+| `eventbrite_manager.py` | Creates, updates and deletes EventBrite events |
+| `gcal_events.py` | Creates, updates and deletes Google calendar events in a private Google calendar, and invite trainers. |
+| `public_gcal_events.py` | Creates, updates and delete Google calendar events in a public Google calendar. |
+| `slack_manager.py` | Creates, updates and archives Slack channels, and invite trainers to it. |
+| `create_usernames_spreadsheet.py` | Creates a list of usernames from the EventBrite registrant lists, and writes it to a Google spreadsheet |
+| `zoom_attendance_to_eventbrite.py` | Reconciles the attendance of an event between Zoom participation records and the EventBrite attendees list, highlighting potential errors. |
+| `create_events.py` (legacy) | Creates EventBrite events manually, by passing options as arguments. |
+
+## Common arguments
+Most of the above scripts have some common arguments which can be specified: 
+
+| Argument | Description |
+| --- | --- |
+|  `-h, --help` | show this help message and exit |
+| `--date YYYY-MM-DD[THH:MM:SS[±HH:MM]]` | Manage the first event on this date |
+| `--course_id COURSE_ID` | Handle course specified by `COURSE_ID`, corresponding to the `course_id` in the spreadsheet |
+| `--config_dir CONFIG_DIR` | Directory that holds the configuration files |
+| `--secrets_dir SECRETS_DIR` | Directory that holds the configuration files |
+| `--create` | Creates events/webinar/channel |
+| `--update` | Updates events/webinar/channel |
+| `--delete` | Deletes events/webinar |
+
