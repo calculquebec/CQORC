@@ -5,12 +5,14 @@ import os, argparse, datetime
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.google.GDriveInterface as GDriveInterface
 import interfaces.google.GSheetsInterface as GSheetsInterface
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--event_id", help="EventBrite event id")
+parser.add_argument("--course_id", help="Generate for the event identified by course_id")
 parser.add_argument("--next", default=False, action='store_true', help="Generate for the next event after now")
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
 parser.add_argument("--course_code", help="Code for the course (i.e. HPC101)")
@@ -33,6 +35,18 @@ credentials_file_path = os.path.join(secrets_dir, credentials_file)
 gdrive = GDriveInterface.GDriveInterface(credentials_file_path)
 gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
 
+# get the events from the working calendar in the Google spreadsheets
+calendar = CQORCcalendar.Calendar(config, args)
+course = None
+eventbrite_id = None
+if args.course_id:
+    course = calendar[args.course_id]
+    eventbrite_id = course['sessions'][0]['eventbrite_id']
+elif args.event_id:
+    eventbrite_id = args.event_id
+    course = [course for course in calendar.get_courses() if course['sessions'][0]['eventbrite_id'] == eventbrite_id][0]
+
+
 # this script's config
 config = global_config['script.usernames']
 if args.create_template_file:
@@ -43,7 +57,7 @@ if args.create_template_file:
 # initialize EventBrite interface:
 eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 # retrieve event from EventBrite
-if args.event_id:
+if eventbrite_id:
     event = eb.get_event(args.event_id)
 else:
     events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="current_future", flattened=True, order_by="start_asc")
@@ -64,6 +78,8 @@ locale = event["locale"].split('_')[0]
 
 if args.course_code:
     course_code = args.course_code
+elif course:
+    course_code = course['sessions'][0]['code']
 else:
     course_code = extract_course_code_from_title(global_config, title)
 
@@ -114,9 +130,10 @@ slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
 
 start = to_iso8061(eb_event['start']['local'])
 date = start.date()
-locale = eb_event['locale'].split('_')[0]
-course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
-channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
+if course:
+    channel_name = course['sessions'][0]['slack_channel']
+else:
+    channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
 
 if not slack.is_member(channel_name):
     slack.join_channel(channel_name)
