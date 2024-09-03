@@ -84,7 +84,6 @@ for course in courses:
             print(f"Deleting webinar {webinar['id']}")
             zoom.delete_webinar(webinar['id'])
             calendar.set_zoom_id(first_session['course_id'], '')
-            exit(0)
 
         if args.update_panelists or args.update:
             panelists = zoom.get_panelists(webinar['id'])
