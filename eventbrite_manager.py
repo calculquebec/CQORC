@@ -90,7 +90,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Create a new event from a template.")
 
     parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-    parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+    parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
     parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
     parser.add_argument("--course_id", help="Handle course specified by course_id")
     parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run")

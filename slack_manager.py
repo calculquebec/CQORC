@@ -13,7 +13,7 @@ from common import Trainers
 parser = argparse.ArgumentParser()
 parser.add_argument("--course_id", default=None, help="Manage only for this course id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
 parser.add_argument("--create", default=False, action='store_true', help="Create channel")
 parser.add_argument("--invites", default=False, action='store_true', help="Invite trainers")
 parser.add_argument("--bookmarks", default=False, action='store_true', help="Update bookmarks on channel")
