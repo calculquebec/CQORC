@@ -10,6 +10,7 @@ from glob import glob
 #import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.eventbrite.EventbriteInterface as eventbrite
 from common import UTC_FMT, valid_date, to_iso8061, ISO_8061_FORMAT, Trainers, get_config
+from common import get_trainer_keys
 import CQORCcalendar
 
 
@@ -124,7 +125,7 @@ if __name__ == "__main__":
 
     for course in courses:
         first_session = course['sessions'][0]
-        instructor = ','.join([trainers.fullname(session['instructor']) for session in course['sessions']])
+        instructor = ','.join(get_trainer_keys(course, ['instructor'])
 
         if first_session['code']:
             # Read the description from the repo

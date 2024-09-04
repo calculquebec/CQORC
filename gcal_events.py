@@ -7,6 +7,7 @@ import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
+from common import get_trainer_keys
 from common import Trainers
 
 parser = argparse.ArgumentParser()
@@ -55,11 +56,7 @@ else:
 for session in sessions:
     try:
         title = f"{session['code']} - {session['title']}"
-        attendees_keys = []
-        for role in ['instructor', 'host', 'assistants']:
-            if session[role]:
-                attendees_keys += session[role].split(',')
-        attendees = [trainers.calendar_email(key) for key in attendees_keys]
+        attendees = [trainers.calendar_email(key) for key in get_trainer_keys(session, ['instructor', 'host', 'assistants'])]
 
         start_time = to_iso8061(session['start_date']) + datetime.timedelta(minutes=start_offset_minutes)
         end_time = to_iso8061(session['end_date'])

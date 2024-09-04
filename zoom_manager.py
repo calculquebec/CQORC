@@ -7,6 +7,7 @@ import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
+from common import get_trainer_keys
 from common import Trainers
 from common import get_survey_link
 
@@ -86,17 +87,16 @@ for course in courses:
             calendar.set_zoom_id(first_session['course_id'], '')
 
         if args.update_panelists or args.update:
+            attendee_keys = get_trainer_keys(course, ['assistants', 'instructor', 'host'])
             panelists = zoom.get_panelists(webinar['id'])
-            for session in course['sessions']:
-                for k in session['assistants'].split(',') + [session['instructor']] + session['host'].split(','):
-                    key = k.strip()
-                    if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
-                        zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
+            for key in attendee_keys:
+                if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
+                    zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
 
         if args.update_hosts or args.update:
             params = {}
             settings = {}
-            settings['alternative_hosts'] = ','.join(set([trainers.zoom_email(k) for k in session['host'].split(',') for session in course['sessions']]))
+            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in get_trainer_keys(course, ['host']))
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 

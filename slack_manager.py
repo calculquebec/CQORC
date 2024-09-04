@@ -8,6 +8,7 @@ import CQORCcalendar
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import get_survey_link
+from common import get_trainer_keys
 from common import Trainers
 
 parser = argparse.ArgumentParser()
@@ -80,13 +81,7 @@ for course in courses:
                 slack.create_channel(slack_channel_name)
 
         if args.invites:
-            attendees_keys = []
-            for role in ['instructor', 'host', 'assistants']:
-                for session in course['sessions']:
-                    if session[role]:
-                        attendees_keys += session[role].split(',')
-            attendees = [trainers.slack_email(key) for key in attendees_keys]
-            attendees = list(set(attendees))
+            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants'])
 
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"

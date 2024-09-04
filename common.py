@@ -65,6 +65,25 @@ def get_config(args, debug_level:int=0):
 
     return global_config
 
+def get_trainer_keys(course_or_session, roles):
+    if roles is str:
+        roles = [roles]
+
+    course = {}
+    if 'sessions' in course_or_session.keys():
+        course = course_or_session
+    else:
+        # we received just a session instead of a course dictionary
+        # create a fake course that has only one session
+        course = {'sessions': [course_or_session]}
+
+    keys = []
+    for role in roles:
+        for session in course['sessions']:
+            if role in session.keys() and session[role]:
+                keys += [key.strip() for key in session[role].split(',')]
+
+    return list(set(keys))
 
 def extract_course_code_from_title(config, title):
     return eval('f' + repr(config['global']['course_code_template']))
