@@ -71,7 +71,6 @@ for course in courses:
         if not slack_channel_name:
             slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
             slack_channel_name = slack_channel_name.lower()
-            calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.create:
             if args.dry_run:
@@ -79,6 +78,7 @@ for course in courses:
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.create_channel(slack_channel_name)
+                calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.invites:
             attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants'])]
