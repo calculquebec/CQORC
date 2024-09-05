@@ -72,10 +72,21 @@ def update_html(description, content, instructor_name):
 
     if plan:
         new_plan = soup.new_tag("ul")
-        for i in content["plan"]:
-            new_li = soup.new_tag("li")
-            new_li.string = i
-            new_plan.append(new_li)
+        for item in content["plan"]:
+            if isinstance(item, str):
+                new_li = soup.new_tag("li")
+                new_li.string = item
+                new_plan.append(new_li)
+            elif isinstance(item, list):
+                new_li = soup.new_tag("li")
+                new_li.string = item[0]
+                new_plan.append(new_li)
+                new_sub_plan = soup.new_tag("ul")
+                for subitem in item[1:]:
+                    new_li = soup.new_tag("li")
+                    new_li.string = subitem
+                    new_sub_plan.append(new_li)
+                new_plan.append(new_sub_plan)
         plan.replace_with(new_plan)
 
     # Update instructor
@@ -134,6 +145,15 @@ if __name__ == "__main__":
         else:
             event_description = None
             print("Empty workshop code, skipping updating description")
+
+        # handle course on multiple sessions
+        if len(course['sessions']) > 1:
+            print(f"{event_description['plan']}")
+            if not isinstance(event_description['plan'], list) or not len(event_description['plan']) == len(course['sessions']):
+                print(f"Error: Course is multiple sessions. Expecting a lesson plan that is two-dimensional of length {len(course['sessions'])}.")
+
+            for idx, session in enumerate(course['sessions']):
+                event_description['plan'][idx][0] += f" <b>({session['start_date']} - {session['end_date']})</b>"
 
         # Create the event
         if args.create:
