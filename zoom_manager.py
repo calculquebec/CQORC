@@ -96,7 +96,7 @@ for course in courses:
         if args.update_hosts or args.update:
             params = {}
             settings = {}
-            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in get_trainer_keys(course, ['host']))
+            settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in get_trainer_keys(course, ['host'])])
             params['settings'] = settings
             zoom.update_webinar(webinar['id'], params)
 
