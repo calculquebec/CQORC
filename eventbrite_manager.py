@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     for course in courses:
         first_session = course['sessions'][0]
-        instructor = ','.join(get_trainer_keys(course, ['instructor'])
+        instructor = ','.join(get_trainer_keys(course, ['instructor']))
 
         if first_session['code']:
             # Read the description from the repo
