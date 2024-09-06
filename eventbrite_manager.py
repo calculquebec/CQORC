@@ -136,7 +136,7 @@ if __name__ == "__main__":
 
     for course in courses:
         first_session = course['sessions'][0]
-        instructor = ','.join(get_trainer_keys(course, ['instructor']))
+        instructor = ','.join([trainers.fullname(key) for key in get_trainer_keys(course, ['instructor'])])
 
         if first_session['code']:
             # Read the description from the repo
@@ -153,7 +153,10 @@ if __name__ == "__main__":
                 print(f"Error: Course is multiple sessions. Expecting a lesson plan that is two-dimensional of length {len(course['sessions'])}.")
 
             for idx, session in enumerate(course['sessions']):
-                event_description['plan'][idx][0] += f" <b>({session['start_date']} - {session['end_date']})</b>"
+                start_date = to_iso8061(session['start_date'])
+                end_date = to_iso8061(session['end_date'])
+
+                event_description['plan'][idx][0] = f"<b>{event_description['plan'][idx][0]} ({start_date.date()}, {start_date.time().__str__()[:5]} - {end_date.time().__str__()[:5]})</b>"
 
         # Create the event
         if args.create:
