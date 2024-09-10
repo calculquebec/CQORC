@@ -24,7 +24,7 @@ class GoogleInterface:
         self.service_name = service_name
         self.service_version = service_version
         token_file_name = "token_%s_%s.json" % (self.service_name, self.service_version)
-        self.token_file = os.path.join(os.getenv('CQORC_SECRETS_DIR', '.'), token_file_name)
+        self.token_file = os.path.join(os.getenv('CQORC_SECRETS_DIR', './secrets'), token_file_name)
 
 
     def get_credentials(self):
@@ -39,6 +39,8 @@ class GoogleInterface:
             # The file token.json stores the user's access and refresh tokens, and is
             # created automatically when the authorization flow completes for the first
             # time.
+            print(self.token_file)
+            print(os.path.exists(self.token_file))
             if os.path.exists(self.token_file):
                 self.credentials = Credentials.from_authorized_user_file(self.token_file, self.scopes)
             # If there are no (valid) credentials available, let the user log in.
