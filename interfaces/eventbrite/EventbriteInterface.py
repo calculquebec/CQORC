@@ -100,6 +100,8 @@ class EventbriteInterface(eb.Eventbrite):
         if isinstance(dt, datetime):
             return dt.astimezone(tz)
         else:
+            if dt.endswith('Z'):
+                dt = dt.replace('Z', '+00:00')
             return datetime.fromisoformat(dt).astimezone(tz)
 
     def create_event_from(self, event_id, title, start_date, end_date, tz, summary="[[SUMMARY]]"):

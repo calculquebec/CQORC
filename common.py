@@ -20,6 +20,8 @@ def to_iso8061(dt, tz=None):
         return dt.astimezone(tz)
     else:
         try:
+            if dt.endswith('Z'):
+                dt = dt.replace('Z', '+00:00')
             date = datetime.fromisoformat(dt).astimezone(tz)
         except:
             date = datetime.strptime(dt, '%Y-%m-%d %H:%M:%S').astimezone(tz)
