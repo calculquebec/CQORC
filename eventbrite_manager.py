@@ -160,6 +160,10 @@ if __name__ == "__main__":
 
         # Create the event
         if args.create:
+            if first_session['eventbrite_id']:
+                print(f"Error: event already exists with EventBrite ID: {first_session['eventbrite_id']}")
+                exit(1)
+
             # for multi-session courses, the duration of the webinar must be from the start to the end
             start_date = min([to_iso8061(session['start_date']) for session in course['sessions']])
             end_date = max([to_iso8061(session['end_date']) for session in course['sessions']])
