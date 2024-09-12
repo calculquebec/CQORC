@@ -177,6 +177,7 @@ if __name__ == "__main__":
                 summary=event_description["summary"] if event_description else "",
             )
             calendar.set_eventbrite_id(first_session['course_id'], eventid)
+            calendar.update_spreadsheet()
             print(f"Successfully created {first_session['title']}({eventid}) {start_date} {end_date}")
         else:
             eventid = first_session['eventbrite_id']
