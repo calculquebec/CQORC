@@ -72,6 +72,7 @@ for course in courses:
                 webinar = zoom.create_webinar(first_session['title'], duration, start_time.date(), start_time.time())
                 if webinar and 'id' in webinar:
                     calendar.set_zoom_id(first_session['course_id'], webinar['id'])
+                    calendar.update_spreadsheet()
 
         if first_session['zoom_id']:
             webinar = zoom.get_webinar(first_session['zoom_id'])
@@ -80,11 +81,13 @@ for course in courses:
             if webinars:
                 webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
                 calendar.set_zoom_id(first_session['course_id'], webinar['id'])
+                calendar.update_spreadsheet()
 
         if args.delete:
             print(f"Deleting webinar {webinar['id']}")
             zoom.delete_webinar(webinar['id'])
             calendar.set_zoom_id(first_session['course_id'], '')
+            calendar.update_spreadsheet()
 
         if args.update_panelists or args.update:
             attendee_keys = get_trainer_keys(course, ['assistants', 'instructor', 'host'])
