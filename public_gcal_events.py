@@ -1,5 +1,5 @@
 #!/bin/env python3
-import os, argparse, datetime
+import os, argparse, datetime, itertools
 
 import interfaces.google.GCalInterface as GCalInterface
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
@@ -90,7 +90,11 @@ for session in sessions:
             summary = f"""{event_description['summary']}
 
 {event_description['description']}"""
-            plan = "\n* ".join([''] + event_description['plan'])
+            if isinstance(event_description['plan'], list) and isinstance(event_description['plan'][0], str):
+                plan = "\n* ".join([''] + event_description['plan'])
+            elif isinstance(event_description['plan'], list) and isinstance(event_description['plan'][0], list):
+                # we flatten the 2d list
+                plan = "\n* ".join([''] + list(itertools.chain.from_iterable(event_description['plan'])))
         else:
             title = session['title']
             plan = "-"
