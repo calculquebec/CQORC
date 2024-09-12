@@ -64,12 +64,16 @@ for session in sessions:
         description = f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens"""
 
         if args.create:
-            if args.dry_run:
+            if session['private_gcal_id']:
+                event_id = session['private_gcal_id']
+                print(f"Calendar ID found: {session['private_gcal_id']}, not creating a new event")
+            elif args.dry_run:
                 cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
                 print(f"Dry-run: would run {cmd}")
             else:
                 event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
                 calendar.set_private_gcal_id(session['course_id'], session['start_date'], event['id'])
+                calendar.update_spreadsheet()
 
         elif args.update:
             if session['private_gcal_id']:
@@ -103,6 +107,7 @@ for session in sessions:
             else:
                 gcal.delete_event(event_id, send_updates=send_updates)
                 calendar.set_private_gcal_id(session['course_id'], session['start_date'], '')
+                calendar.update_spreadsheet()
     except Exception as error:
         print(f"Error encountered when processing session {session}: %s" % error)
 

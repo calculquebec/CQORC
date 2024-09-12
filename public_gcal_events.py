@@ -117,12 +117,16 @@ Plan:
 {plan}
 """
         if args.create:
-            if args.dry_run:
+            if session['public_gcal_id']:
+                event_id = session['public_gcal_id']
+                print(f"Calendar ID found: {session['public_gcal_id']}, not creating a new event")
+            elif args.dry_run:
                 cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
                 print(f"Dry-run: would run {cmd}")
             else:
                 event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
                 calendar.set_public_gcal_id(session['course_id'], session['start_date'], event['id'])
+                calendar.update_spreadsheet()
 
         elif args.update:
             if session['public_gcal_id']:
@@ -156,6 +160,7 @@ Plan:
             else:
                 gcal.delete_event(event_id, send_updates=send_updates)
                 calendar.set_public_gcal_id(session['course_id'], session['start_date'], '')
+                calendar.update_spreadsheet()
 
     except Exception as e:
         print(f"Error encountered when processing session {session}: {e}")
