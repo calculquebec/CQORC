@@ -3,17 +3,18 @@ import os, argparse, datetime
 
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
-from common import get_events_from_sheet_calendar
 from common import get_survey_link
+from common import get_trainer_keys
 from common import Trainers
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", default=None, help="Manage only for this course id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
 parser.add_argument("--create", default=False, action='store_true', help="Create channel")
 parser.add_argument("--invites", default=False, action='store_true', help="Invite trainers")
 parser.add_argument("--bookmarks", default=False, action='store_true', help="Update bookmarks on channel")
@@ -38,49 +39,38 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 
 
 # get the events from the working calendar in the Google spreadsheets
-events = get_events_from_sheet_calendar(config, args)
+calendar = CQORCcalendar.Calendar(config, args)
 
 # keep only events on the date listed
-if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+if args.course_id:
+    if args.course_id in calendar.keys():
+        courses = [calendar[args.course_id]]
+    else:
+        print(f"Course {args.course_id} not found")
+        exit(1)
+else:
+    courses = calendar.get_courses()
 
-for event in events:
+for course in courses:
     try:
+        first_session = course['sessions'][0]
+
         # no course code, continue
-        if not 'code' in event:
+        if not 'code' in first_session:
             continue
 
-        date = to_iso8061(event['start_date']).date()
-        course_code = event['code']
-        locale = event['langue']
-        title = event['title']
+        date = to_iso8061(first_session['start_date']).date()
+        course_code = first_session['code']
+        locale = first_session['language']
+        title = first_session['title']
 
         survey_link = get_survey_link(config, locale, title, date)
-        slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
-        slack_channel_name = slack_channel_name.lower()
 
-        attendees_keys = []
-        if event['instructor']: attendees_keys += [event['instructor']]
-        if event['host']: attendees_keys += [event['host']]
-        if event['assistants']: attendees_keys += event['assistants'].split(',')
-        attendees = [trainers.slack_email(key) for key in attendees_keys]
-        attendees = list(set(attendees))
-
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = int(event['hours'])
-
-        webinar = zoom.get_webinars(date = start_time.date())
-        if webinar:
-            webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
-        description = ''
-        if webinar:
-            description = f"""
-Start URL: {webinar['start_url']}
-Join URL: {webinar['join_url']}"""
-
-        original_start_time = start_time
-        original_end_time = end_time
+        # if is documented, use that, otherwise create it
+        slack_channel_name = first_session['slack_channel']
+        if not slack_channel_name:
+            slack_channel_name = eval('f' + repr(config['global']['slack_channel_template']))
+            slack_channel_name = slack_channel_name.lower()
 
         if args.create:
             if args.dry_run:
@@ -88,8 +78,11 @@ Join URL: {webinar['join_url']}"""
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.create_channel(slack_channel_name)
+                calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.invites:
+            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants'])]
+
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
                 print(f"Dry-run: would run {cmd}")
@@ -97,6 +90,14 @@ Join URL: {webinar['join_url']}"""
                 slack.invite_to_channel(slack_channel_name, attendees)
 
         if args.bookmarks:
+            if first_session['zoom_id']:
+                webinar = zoom.get_webinar(webinar_id = first_session['zoom_id'])
+            else:
+                start_time = to_iso8061(first_session['start_date'])
+                webinar = zoom.get_webinars(date = start_time.date())
+                if webinar:
+                    webinar = zoom.get_webinar(webinar_id = webinar[0]['id'])
+
             bookmarks = [
                 {'title': 'Magic Castle', 'link': f'https://{course_code.lower()}.calculquebec.cloud'}
                 ]
@@ -134,10 +135,6 @@ Join URL: {webinar['join_url']}"""
                 print(f"{slack.list_channel_scheduled_messages(slack_channel_name)}")
 
         if args.messages:
-            # events on two days
-            if start_time.date() != end_time.date():
-                duration = duration/2.
-
             magic_castle_link = slack.get_channel_bookmark_link(slack_channel_name, "Magic Castle")
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
@@ -151,15 +148,11 @@ Join URL: {webinar['join_url']}"""
             messages = []
             for prefix in message_prefixes:
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
-                for date in set([start_time.date(), end_time.date()]):
-                    if date == original_start_time.date():
-                        start_time = original_start_time
-                        end_time = original_start_time + datetime.timedelta(hours=duration)
-                    elif date == original_end_time.date():
-                        start_time = original_end_time - datetime.timedelta(hours=duration)
-                        end_time = original_end_time
+                for session in course['sessions']:
+                    start_time = to_iso8061(session['start_date'])
+                    end_time = to_iso8061(session['end_date'])
 
-                    if date == original_start_time.date() or config['slack'][f'{prefix}_multidays'] == "True":
+                    if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
                         time = start_time
                         if f'{prefix}_offset_start' in config['slack']:
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
@@ -177,10 +170,11 @@ Join URL: {webinar['join_url']}"""
                 else:
                     slack.post_to_channel(slack_channel_name, message['message'], message['time'])
 
-
-
     except Exception as e:
-        print(f"Error encountered when processing event {event}: \n\n{e}")
+        print(f"Error encountered when processing course {course}: \n\n{e}")
 
+
+if not args.dry_run:
+    calendar.update_spreadsheet()
 
 

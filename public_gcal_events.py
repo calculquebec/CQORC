@@ -1,19 +1,20 @@
 #!/bin/env python3
-import os, argparse, datetime
+import os, argparse, datetime, itertools
 
 import interfaces.google.GCalInterface as GCalInterface
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import yaml
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
-from common import get_events_from_sheet_calendar
 from common import actualize_repo
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", help="Generate events for the course specified by the course_id")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
 parser.add_argument("--all", default=False, action='store_true', help="Act for all events")
 parser.add_argument("--create", default=False, action='store_true', help="Create events")
 parser.add_argument("--update", default=False, action='store_true', help="Update events")
@@ -44,32 +45,39 @@ def get_eb_event_by_date(query_date):
     return eb_event
 
 # get the events from the working calendar in the Google spreadsheets
-events = get_events_from_sheet_calendar(config, args)
+calendar = CQORCcalendar.Calendar(config, args)
+sessions = calendar.get_all_sessions()
 
-# keep only events on the date listed
+# keep only sessions on the date listed
 if args.date:
-    events = [event for event in events if args.date.date().isoformat() in event['start_date']]
+    sessions = [session for session in sessions if args.date.date().isoformat() in session['start_date']]
+# keep only sessions for the given course_id
+if args.course_id:
+    sessions = [session for session in sessions if args.course_id == session['course_id']]
 
 send_updates = "none"
 
 # ensure descriptions are up to date
 actualize_repo(config["descriptions"]["repo_url"], config["descriptions"]["local_repo"])
 
-for event in events:
+for session in sessions:
     try:
-        if len(event['code']):
+        if len(session['code']):
             # Read the description from the repo
-            with open(os.path.join(config["descriptions"]["local_repo"], f"{event['code']}-{event['langue']}.yaml")) as f:
+            with open(os.path.join(config["descriptions"]["local_repo"], f"{session['code']}-{session['language']}.yaml")) as f:
                 event_description = yaml.safe_load(f)
         else:
             event_description = None
-            print("Empty workshop code, skipping updating description")        
+            print("Empty workshop code, skipping updating description")
 
-        start_time = to_iso8061(event['start_date'])
-        end_time = to_iso8061(event['end_date'])
-        duration = int(event['hours'])
+        start_time = to_iso8061(session['start_date'])
+        end_time = to_iso8061(session['end_date'])
 
-        eb_event = get_eb_event_by_date(start_time.date())
+        if session['eventbrite_id']:
+            eb_event = eb.get_event(session['eventbrite_id'])
+        else:
+            eb_event = get_eb_event_by_date(start_time.date())
+        eb_event_id = None
         if eb_event:
             eb_event_id = eb_event['id']
 
@@ -82,9 +90,13 @@ for event in events:
             summary = f"""{event_description['summary']}
 
 {event_description['description']}"""
-            plan = "\n* ".join([''] + event_description['plan'])
+            if isinstance(event_description['plan'], list) and isinstance(event_description['plan'][0], str):
+                plan = "\n* ".join([''] + event_description['plan'])
+            elif isinstance(event_description['plan'], list) and isinstance(event_description['plan'][0], list):
+                # we flatten the 2d list
+                plan = "\n* ".join([''] + list(itertools.chain.from_iterable(event_description['plan'])))
         else:
-            title = event['title']
+            title = session['title']
             plan = "-"
             summary = "-"
 
@@ -92,7 +104,7 @@ for event in events:
         if eb_event:
             title = eb_event['name']['text']
 
-        if event['langue'] == "FR":
+        if session['language'] == "FR":
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -108,57 +120,56 @@ Plan:
 Plan:
 {plan}
 """
+        if args.create:
+            if session['public_gcal_id']:
+                event_id = session['public_gcal_id']
+                print(f"Calendar ID found: {session['public_gcal_id']}, not creating a new event")
+            elif args.dry_run:
+                cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+                calendar.set_public_gcal_id(session['course_id'], session['start_date'], event['id'])
+                calendar.update_spreadsheet()
 
-        # events on two days
-        two_day_events = False
-        if start_time.date() != end_time.date():
-            two_day_events = True
-            duration = duration/2.
+        elif args.update:
+            if session['public_gcal_id']:
+                event_id = session['public_gcal_id']
+            else:
+                existing_events = gcal.get_events_by_date(start_time)
+                if len(existing_events) != 1:
+                    print("Number of existing events found different than 1. Case not handled. Exiting")
+                    exit(1)
+                event_id = existing_events[0]['id']
 
-        original_start_time = start_time
-        original_end_time = end_time
-
-        for date in set([start_time.date(), end_time.date()]):
-            if date == original_start_time.date():
-                start_time = original_start_time
-                end_time = original_start_time + datetime.timedelta(hours=duration)
-            elif date == original_end_time.date():
-                start_time = original_end_time - datetime.timedelta(hours=duration)
-                end_time = original_end_time
-
-            if args.create:
-                if args.dry_run:
-                    cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-            elif args.update:
+            if args.dry_run:
+                cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+        elif args.delete:
+            if session['public_gcal_id']:
+                event_id = session['public_gcal_id']
+            else:
                 existing_events = gcal.get_events_by_date(start_time)
                 if len(existing_events) != 1:
                     print("Number of existing events found different than 1. Case not handled. Exiting")
                     exit(1)
 
                 event_id = existing_events[0]['id']
-                if args.dry_run:
-                    cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-            elif args.delete:
-                existing_events = gcal.get_events_by_date(start_time)
-                if len(existing_events) != 1:
-                    print("Number of existing events found different than 1. Case not handled. Exiting")
-                    exit(1)
 
-                event_id = existing_events[0]['id']
+            if args.dry_run:
+                cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
+                print(f"Dry-run: would run {cmd}")
+            else:
+                gcal.delete_event(event_id, send_updates=send_updates)
+                calendar.set_public_gcal_id(session['course_id'], session['start_date'], '')
+                calendar.update_spreadsheet()
 
-                if args.dry_run:
-                    cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
-                else:
-                    gcal.delete_event(event_id, send_updates=send_updates)
     except Exception as e:
-        print(f"Error encountered when processing event {event}: {e}")
+        print(f"Error encountered when processing session {session}: {e}")
 
 
+if not args.dry_run:
+    calendar.update_spreadsheet()
 

@@ -4,18 +4,28 @@ import os, argparse, datetime
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
+import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
 from common import Trainers
 from statistics import mean
 
+
+def stringify_dict_ordered_by_name(d):
+    s = ""
+    for k in sorted(d.keys(), key=str.casefold):
+        s += f"{k}:{d[k]}\n"
+    return s
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument("--eventbrite_id", help="EventBrite event id")
 parser.add_argument("--zoom_id", help="EventBrite event id")
 parser.add_argument("--date", metavar=ISO_8061_FORMAT, type=valid_date, help="Generate for the first event on this date")
+parser.add_argument("--course_id", help="ID of the course")
 parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
 parser.add_argument("--noslack", default=False, action='store_true', help="Do not post to Slack")
 parser.add_argument("--verbose", default=False, action='store_true', help="Print lists of users")
 args = parser.parse_args()
@@ -42,7 +52,7 @@ elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
 if len(webinars) != 1:
-    print(f"Error, number of webinars found is not 1: {len(webinar)}")
+    print(f"Error, number of webinars found is not 1: {len(webinars)}")
     exit(1)
 
 # get the list of participants to the webinar
@@ -55,30 +65,31 @@ if args.verbose:
         print(f"{v}")
     print("===============")
 
-zoom_participants = {p['user_email']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
+zoom_participants = {p['name']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
+print(f"{zoom_participants}")
 # calculating the total attendance duration for each attendee
-for email in zoom_participants.keys():
-    records = [r for r in participants_records if r['user_email'] == email]
+for name in zoom_participants.keys():
+    records = [r for r in participants_records if r['name'] == name]
     # the participant joined multiple times, we need to combine them
     if len(records) >= 1:
         # Algorithm from https://medium.com/@saraswatp/solving-overlapping-intervals-with-python-the-merged-interval-problem-dcf16ad09190
         # first, sort the records by join_time
-        records.sort(key=lambda x: x['join_time'])
+        records.sort(key=lambda x: to_iso8061(x['join_time']))
         merged_records = []
         for record in records:
             # If the list of merged records is empty or if the current record does not overlap with the previous one,
             # simply add it to the merged list
-            if not merged_records or record['join_time'] > merged_records[-1]['leave_time']:
+            if not merged_records or to_iso8061(record['join_time']) > to_iso8061(merged_records[-1]['leave_time']):
                 merged_records.append(record)
             else:
                 # If the current interval overlaps with previous one, merge them
-                merged_records[-1]['leave_time'] = max(merged_records[-1]['leave_time'], record['leave_time'])
-                merged_records[-1]['duration'] = merged_records[-1]['leave_time'] - merged_records[-1]['join_time']
+                merged_records[-1]['leave_time'] = max(to_iso8061(merged_records[-1]['leave_time']), to_iso8061(record['leave_time']))
+                merged_records[-1]['duration'] = (to_iso8061(merged_records[-1]['leave_time']) - to_iso8061(merged_records[-1]['join_time'])).total_seconds()
 
         records = merged_records
 
     # sum the duration of each records
-    zoom_participants[email]['duration'] = sum([r['duration'] for r in records])
+    zoom_participants[name]['duration'] = sum([r['duration'] for r in records])
 
 
 # retrieve the maximum duration
@@ -167,23 +178,28 @@ ignored_email_domains = global_config['script.presence']['ignored_email_domains'
 for domain in ignored_email_domains:
     missing_in_eb = [email for email in missing_in_eb if domain not in email]
 
-
 if missing_in_eb:
     message += "\nThe following people attended the Zoom event, but are not in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email not in eb_registrants:
-            message += f"{email}: {zoom_participants[email]['name']}\n"
+            tmp_dict[zoom_participants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
     message += "\nThe following people attended the Zoom event, but are not checked in in EventBrite:\n"
+    tmp_dict = {}
     for email in missing_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if should_not_in_eb:
     message += "\nThe following people are marked as Checked in in EventBrite, but did not attend long enough in Zoom:\n"
+    tmp_dict = {}
     for email in should_not_in_eb:
         if email in eb_registrants:
-            message += f"{eb_registrants[email]['name']}: {email}\n"
+            tmp_dict[eb_registrants[email]['name']] = email
+    message += stringify_dict_ordered_by_name(tmp_dict)
 
 if not message:
     message = "No mistake found in EventBrite checked-in attendees"

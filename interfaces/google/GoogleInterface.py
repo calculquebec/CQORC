@@ -24,7 +24,7 @@ class GoogleInterface:
         self.service_name = service_name
         self.service_version = service_version
         token_file_name = "token_%s_%s.json" % (self.service_name, self.service_version)
-        self.token_file = os.path.join(os.getenv('CQORC_SECRETS_DIR', '.'), token_file_name)
+        self.token_file = os.path.join(os.getenv('CQORC_SECRETS_DIR', './secrets'), token_file_name)
 
 
     def get_credentials(self):
