@@ -23,6 +23,12 @@ args = parser.parse_args()
 # read configuration files
 global_config = get_config(args)
 
+# get the events from the working calendar in the Google spreadsheets
+calendar = CQORCcalendar.Calendar(global_config, args)
+course = None
+if args.course_id:
+    course = calendar[args.course_id]
+
 # initialize Zoom interface
 zoom_user = global_config['zoom']['user']
 zoom = ZoomInterface.ZoomInterface(global_config['zoom']['account_id'], global_config['zoom']['client_id'], global_config['zoom']['client_secret'], global_config['global']['timezone'], zoom_user)
@@ -30,6 +36,8 @@ zoom = ZoomInterface.ZoomInterface(global_config['zoom']['account_id'], global_c
 webinars = []
 if args.zoom_id:
     webinars = zoom.get_webinars(ids = [int(args.zoom_id)])
+elif course:
+    webinars = zoom.get_webinars(ids = [int(course['sessions'][0]['zoom_id'])])
 elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
@@ -99,6 +107,8 @@ eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 eb_event = None
 if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
+elif course:
+    eb_event = eb.get_event(course['sessions'][0]['eventbrite_id'])
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
     todays_events = []
