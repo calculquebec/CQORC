@@ -357,7 +357,7 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument("--config_dir", default=".", help="Directory that holds the configuration files")
-    parser.add_argument("--secrets_dir", default=".", help="Directory that holds the configuration files")
+    parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
     parser.add_argument("--title", default=None, help="Event title")
     parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
     parser.add_argument("--duration", default=None, help="Event duration in hour")
@@ -393,7 +393,7 @@ if __name__ == '__main__':
     # Write the certificates:
     write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
-    # Get email config:
+    # Get email config, in email.cfg:
     self_email = global_config['email']['self_email']
     gmail_user = global_config['email']['gmail_user']
     gmail_password = global_config['email']['gmail_password']
