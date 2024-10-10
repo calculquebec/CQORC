@@ -126,6 +126,7 @@ class ZoomInterface:
             'start_time': f'{start_date}T{start_time}',
             "timezone": self.timezone,
             "type": 5,
+            "approval": 0,
         }
 
         # optionally define various settings

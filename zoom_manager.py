@@ -114,6 +114,7 @@ for course in courses:
             settings['post_webinar_survey'] = True
             settings['survey_url'] = get_survey_link(config, locale, title, date)
             settings['question_and_answer'] = {'allow_submit_questions': True, 'enable': True, 'attendees_can_upvote': True, 'attendees_can_comment': True, 'allow_anonymous_questions':False }
+            settings['approval_type'] = 0
             params['settings'] = settings
             params['duration'] = str(int(duration*60))
             params['start_time'] = start_time.astimezone(datetime.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
