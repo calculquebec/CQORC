@@ -77,11 +77,8 @@ for course in courses:
         if first_session['zoom_id']:
             webinar = zoom.get_webinar(first_session['zoom_id'])
         else:
-            webinars = zoom.get_webinars(date = start_time.date())
-            if webinars:
-                webinar = zoom.get_webinar(webinar_id = webinars[0]['id'])
-                calendar.set_zoom_id(first_session['course_id'], webinar['id'])
-                calendar.update_spreadsheet()
+            print(f"No webinar found. Please create it first with the --create option")
+            exit(1)
 
         if args.delete:
             print(f"Deleting webinar {webinar['id']}")
