@@ -173,13 +173,13 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
 
     # Complete duration with the right term for time spelling:
     if language == "en":
-        if duration <= 1.0:
+        if float(duration) <= 1.0:
             duration = str(duration) + " hour."
         else:
             duration = str(duration) + " hours."
 
     elif language == "fr":
-        if duration <= 1.0:
+        if float(duration) <= 1.0:
             duration = str(duration) + " heure."
         else:
             duration = str(duration) + " heures."
