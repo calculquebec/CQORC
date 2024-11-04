@@ -209,7 +209,7 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
    
     return attended_guests
 
-def create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_certificate=True):
+def create_email(gmail_user, guest, email_tplt, send_self, self_email=None, attach_certificate=True):
     """
     Create email, attatch body and PDF certificate
 
@@ -332,7 +332,7 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
         nsent = 0
 
         for guest in guests:
-                email = create_email(gmail_user, guest, email_tplt, args.send_self, args.self_email, attach_certificate)
+                email = create_email(gmail_user, guest, email_tplt, args.send_self, self_email, attach_certificate)
 
                 # Send email
                 if send_self:
