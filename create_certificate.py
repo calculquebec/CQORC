@@ -395,8 +395,8 @@ if __name__ == '__main__':
 
     # Get email config, in email.cfg:
     self_email = global_config['email']['self_email']
-    gmail_user = global_config['email']['gmail_user']
-    gmail_password = global_config['email']['gmail_password']
+    gmail_user = global_config['email']['user']
+    gmail_password = global_config['email']['password']
 
     # Create email:
     if args.send_atnd or args.send_self:
