@@ -321,8 +321,6 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
         gmail_user = input('gmail username: ')
     if not gmail_password:
         gmail_password = getpass.getpass('gmail password: ')
-    if not self_email:
-        self_email = gmail_user
 
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.ehlo()
@@ -394,10 +392,17 @@ if __name__ == '__main__':
     write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
     # Get email config, in email.cfg:
-    self_email = global_config['email']['self_email']
+
     gmail_user = global_config['email']['user']
     gmail_password = global_config['email']['password']
 
+    if args.send_self:
+        if args.self_email is None:
+            self_email = input('Please enter your self email: ')
+        else:
+            self_email = args.self_email
+
+    
     # Create email:
     if args.send_atnd or args.send_self:
         send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, gmail_user=gmail_user, gmail_password=gmail_password, self_email=self_email, attach_certificate=True)
