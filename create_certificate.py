@@ -401,6 +401,9 @@ if __name__ == '__main__':
             self_email = input('Please enter your self email: ')
         else:
             self_email = args.self_email
+    else:
+        self_email = None
+
 
     
     # Create email:
