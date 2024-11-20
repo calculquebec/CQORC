@@ -157,4 +157,7 @@ slack.post_to_channel(channel_name, message)
 # slack.post_to_channel(channel_name, message, post_time)
 
 # add a bookmark
-slack.add_bookmark_to_channel(channel_name, "Username spreadhseet", sheet_url)
+if args.update:
+    slack.update_channel_bookmarks(channel_name, slack.list_channel_bookmarks(channel_name))
+else:
+    slack.add_bookmark_to_channel(channel_name, "Username spreadhseet", sheet_url)
