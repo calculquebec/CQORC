@@ -141,15 +141,20 @@ channel_name = course['sessions'][0]['slack_channel']
 if not slack.is_member(channel_name):
     slack.join_channel(channel_name)
 
-message = f"Username spreadsheet: {sheet_url}"
+
+if filename_template == config.get('filename_template_en'):
+    message = f"To connect to the platform, select your username (beside your name) here: {sheet_url}"
+else:
+    message = f"Pour vous connecter à la plateforme, sélectionner votre nom d'utilisateur (associé à votre nom) ici: {sheet_url}"
+
 start = to_iso8061(event['start']['local'])
 
 # post now
 slack.post_to_channel(channel_name, message)
 
 # post a reminder 30 minutes before start
-post_time = start + datetime.timedelta(minutes=-30)
-slack.post_to_channel(channel_name, message, post_time)
+# post_time = start + datetime.timedelta(minutes=-30)
+# slack.post_to_channel(channel_name, message, post_time)
 
 # add a bookmark
 slack.add_bookmark_to_channel(channel_name, "Username spreadhseet", sheet_url)
