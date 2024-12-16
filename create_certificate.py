@@ -209,7 +209,7 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
    
     return attended_guests
 
-def create_email(gmail_user, guest, email_tplt, send_self, self_email=None, attach_certificate=True):
+def create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_certificate=True):
     """
     Create email, attatch body and PDF certificate
 
@@ -265,7 +265,7 @@ def create_email(gmail_user, guest, email_tplt, send_self, self_email=None, atta
     return outer
 
 
-def send_email(event, guests, email_tplt_dir, send_self, number_to_send, language, gmail_user=None, gmail_password=None, self_email=None, attach_certificate=True):
+def send_email(event, guests, email_tplt_dir, send_self, number_to_send, language, self_email, gmail_user=None, gmail_password=None, attach_certificate=True):
     """
     Create email, attatch body and PDF certificate
 
@@ -322,6 +322,12 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
     if not gmail_password:
         gmail_password = getpass.getpass('gmail password: ')
 
+    if send_self:
+        if self_email is None:
+            self_email = input('Please enter your self email: ')
+    else:
+        self_email = None
+
     with smtplib.SMTP('smtp.gmail.com', 587) as server:
         server.ehlo()
         server.starttls()
@@ -330,7 +336,7 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
         nsent = 0
 
         for guest in guests:
-                email = create_email(gmail_user, guest, email_tplt, args.send_self, self_email, attach_certificate)
+                email = create_email(gmail_user, guest, email_tplt, send_self, self_email, attach_certificate)
 
                 # Send email
                 if send_self:
@@ -395,18 +401,8 @@ if __name__ == '__main__':
 
     gmail_user = global_config['email']['user']
     gmail_password = global_config['email']['password']
-
-    if args.send_self:
-        if args.self_email is None:
-            self_email = input('Please enter your self email: ')
-        else:
-            self_email = args.self_email
-    else:
-        self_email = None
-
-
     
     # Create email:
     if args.send_atnd or args.send_self:
-        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, gmail_user=gmail_user, gmail_password=gmail_password, self_email=self_email, attach_certificate=True)
+        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
 
