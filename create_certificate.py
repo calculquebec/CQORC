@@ -402,6 +402,7 @@ if __name__ == '__main__':
     gmail_user = global_config['email']['user']
     gmail_password = global_config['email']['password']
     
+
     # Create email:
     if args.send_atnd or args.send_self:
         send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
