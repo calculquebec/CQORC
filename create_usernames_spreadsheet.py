@@ -118,11 +118,19 @@ header = [[url], [password]]
 header_range = config['header_range']
 gsheets.update_values(sheet_id, header_range, header)
 
+
 # Create the data to be inserted, sort by name alphabetically
+
+if locale == "fr":
+    start_username=0;
+else:
+    start_username=100;
+
 data = [
     [eval('f' + repr(config['username_template'])), attendee['name']]
-    for user_index, attendee in enumerate(sorted(attendees.values(), key=lambda x: x['name'].casefold()))
+    for user_index, attendee in enumerate(sorted(attendees.values(), key=lambda x: x['name'].casefold()), start=start_username)
 ]
+
 data_range = config['data_range']
 gsheets.update_values(sheet_id, data_range, data)
 
