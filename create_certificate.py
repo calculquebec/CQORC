@@ -68,7 +68,6 @@ def write_certificates(event, guests, certificate_svg_tplt_dir, language, certif
     if not language:
         language = event['locale'].split("_")[0]
         
-
     # Set template name:
     for file in os.listdir(certificate_svg_tplt_dir):
         if file == f"attestation_template_sample_{language}_logo.svg":
@@ -118,7 +117,7 @@ def safe_name(name):
 
     return name.upper()
 
-def build_registrant_list(event, guests, title, duration, date, language, certificate_dir):
+def build_registrant_list(event, guests, title, duration, date, language, first_name, last_name, order_id, certificate_dir):
     """
     Generate a registration list.    
 
@@ -165,6 +164,17 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
         date = datetime.strptime(event['start']['local'], "%Y-%m-%dT%H:%M:%S")
         date = date.strftime("%Y-%m-%d")
 
+    # Set first name:
+    if not first_name:
+        first_name = guests[guest]['first_name']
+
+    # Set last name:
+    if not last_name:
+        last_name = guests[guest]['last_name']
+
+    # Set order id:
+    if not order_id:
+        order_id = guests[guest]['order_id']
 
     # Set language:
     if not language:
@@ -190,10 +200,7 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
 
     for guest in guests:
 
-        first_name = guests[guest]['first_name']
-        last_name = guests[guest]['last_name']
         email = guests[guest]['email']
-        order_id = guests[guest]['order_id']
         context = {'workshop' : title, 
                    'first_name' : safe_name(first_name),
                    'last_name'  : safe_name(last_name),
@@ -206,6 +213,9 @@ def build_registrant_list(event, guests, title, duration, date, language, certif
                                                          order_id)     
         }
         attended_guests.append(context)
+        # Create a personnalysed certificate when specifying first_name, last_name etc...  
+        if first_name or last_name:
+            break
    
     return attended_guests
 
@@ -365,6 +375,9 @@ if __name__ == '__main__':
     parser.add_argument("--title", default=None, help="Event title")
     parser.add_argument("--date", default=None, help="Event date (iso8061) XXXX-XX-XX ; year-month-day")
     parser.add_argument("--duration", default=None, help="Event duration in hour")
+    parser.add_argument("--first_name", default=None, help="Attendee first name")
+    parser.add_argument("--last_name", default=None, help="Attendee last name")
+    parser.add_argument("--order_id", default=None, help="Attendee order identification number")
     parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
     parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
     parser.add_argument("--event_id", help="EventBrite event id", required=True)
@@ -392,7 +405,7 @@ if __name__ == '__main__':
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
     # Generate a registration list:
-    attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.certificate_dir)
+    attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.certificate_dir)
 
     # Write the certificates:
     write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
