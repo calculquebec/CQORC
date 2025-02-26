@@ -22,7 +22,7 @@ if args.config:
     apikey = args.apikey or config['DEFAULT']['apikey']
     course = args.course or config['DEFAULT']['course']
     course = course.lower()
-    tz = config['DEFAULT']['timezone'] or "America/Montreal"
+    timezone = config['DEFAULT']['timezone'] or "America/Montreal"
 
 tzinfo = pytz.timezone(timezone)
 
