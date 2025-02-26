@@ -20,6 +20,8 @@ if args.config:
     config.read(args.config)
     calendar_id = args.calendar_id or config['DEFAULT']['calendar_id']
     apikey = args.apikey or config['DEFAULT']['apikey']
+    course = args.course or config['DEFAULT']['course']
+    course = course.lower()
     tz = config['DEFAULT']['timezone'] or "America/Montreal"
 
 tzinfo = pytz.timezone(timezone)
@@ -50,5 +52,5 @@ response = requests.get(
 
 events = response.json()['items']
 
-exit(any([args.course in event['summary'].lower() for event in events]))
+exit(any([course in event['summary'].lower() for event in events]))
 
