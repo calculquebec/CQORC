@@ -32,13 +32,11 @@ end_time = start_time + timedelta(minutes = int(args.delay))
 if start_time.tzinfo is None:
     start_time = tzinfo.localize(start_time).astimezone(pytz.utc)
     end_time = tzinfo.localize(end_time).astimezone(pytz.utc)
-start_time = start_time.isoformat()
-end_time = end_time.isoformat()
 
 params = {
     'key': apikey,
-    'timeMin': start_time,
-    'timeMax': end_time,
+    'timeMin': start_time.isoformat(),
+    'timeMax': end_time.isoformat(),
     'maxResults': '10',
     'singleEvents': 'true',
     'orderBy': 'startTime',
@@ -51,6 +49,11 @@ response = requests.get(
 )
 
 events = response.json()['items']
+for event in events:
+    if course in event['summary'].lower():
+        event_start_time = datetime.fromisoformat(event['start']['dateTime'])
+        if start_time < event_start_time and event_start_time < end_time:
+            exit(True)
 
-exit(any([course in event['summary'].lower() for event in events]))
+exit(False)
 
