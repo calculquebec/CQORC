@@ -14,7 +14,16 @@ parser.add_argument("--apikey", help="Google API key to use to query calendar")
 parser.add_argument("--config", help="Config file that contains secrets")
 args = parser.parse_args()
 
-tzinfo = pytz.timezone("America/Montreal")
+
+if args.config:
+    config = configparser.ConfigParser()
+    config.read(args.config)
+    calendar_id = args.calendar_id or config['DEFAULT']['calendar_id']
+    apikey = args.apikey or config['DEFAULT']['apikey']
+    tz = config['DEFAULT']['timezone'] or "America/Montreal"
+
+tzinfo = pytz.timezone(timezone)
+
 
 start_time = datetime.now()
 end_time = start_time + timedelta(minutes = int(args.delay))
@@ -23,12 +32,6 @@ if start_time.tzinfo is None:
     end_time = tzinfo.localize(end_time).astimezone(pytz.utc)
 start_time = start_time.isoformat()
 end_time = end_time.isoformat()
-
-if args.config:
-    config = configparser.ConfigParser()
-    config.read(args.config)
-    calendar_id = args.calendar_id or config['DEFAULT']['calendar_id']
-    apikey = args.apikey or config['DEFAULT']['apikey']
 
 params = {
     'key': apikey,
