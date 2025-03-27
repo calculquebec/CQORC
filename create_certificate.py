@@ -117,7 +117,7 @@ def safe_name(name):
 
     return name.upper()
 
-def build_registrant_list(event, guests, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
+def build_registrant_list(event, guests, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
     """
     Generate a registration list.    
 
@@ -164,13 +164,10 @@ def build_registrant_list(event, guests, title, duration, date, language, first_
         date = datetime.strptime(event['start']['local'], "%Y-%m-%dT%H:%M:%S")
         date = date.strftime("%Y-%m-%d")
 
-    
-
     # Set language:
     if not language:
         language = event['locale'].split("_")[0]
         
-
     # Complete duration with the right term for time spelling:
     if language == "en":
         if float(duration) <= 1.0:
@@ -188,8 +185,16 @@ def build_registrant_list(event, guests, title, duration, date, language, first_
 
     attended_guests = []
 
-    # Si on fourni first_name et last_name, cela sous entend un certificat personnalisé alors un seul guest.
-    if first_name and last_name and order_id and email_attendee:  
+    if personnalized_certificate: 
+        if not first_name:
+            first_name = input("Please enter the fist name of the participant: ")
+        if not last_name:
+            last_name = input("Please enter the last name of the participant: ")
+        if not order_id:
+            order_id = input("Please enter the order id of the participant: ")
+        if not email_attendee:
+            email_attendee = input("Please enter the email of the participant: ")
+
         context = {
             'workshop': title,
             'first_name': safe_name(first_name),
@@ -381,6 +386,7 @@ if __name__ == '__main__':
     parser.add_argument("--duration", default=None, help="Event duration in hour")
     parser.add_argument("--first_name", default=None, help="Attendee first name")
     parser.add_argument("--last_name", default=None, help="Attendee last name")
+    parser.add_argument("--personnalized_certificate", default=False, help="Create a personnalized certificate", action="store_true")
     parser.add_argument("--email_attendee", default=None, help="Attendee email")
     parser.add_argument("--order_id", default=None, help="Attendee order identification number")
     parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
@@ -410,7 +416,7 @@ if __name__ == '__main__':
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
     # Generate a registration list:
-    attended_guest = build_registrant_list(eb_event, eb_attendees, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
+    attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
 
     # Write the certificates:
     write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
