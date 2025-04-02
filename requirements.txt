@@ -2,3 +2,4 @@
 -r requirements/requirements-slack.txt
 -r requirements/requirements-eventbrite.txt
 -r requirements/requirements-test.txt
+-r requirements/requirements-certificates.txt
