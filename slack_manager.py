@@ -66,6 +66,8 @@ for course in courses:
 
         survey_link = get_survey_link(config, locale, title, date)
 
+        post_mortem_link = config['slack']['post_mortem_link']
+
         # if is documented, use that, otherwise create it
         slack_channel_name = first_session['slack_channel']
         if not slack_channel_name:
@@ -105,6 +107,8 @@ for course in courses:
                 bookmarks += [{'title': 'Zoom URL Participants', 'link': webinar['join_url']}]
             if survey_link:
                 bookmarks += [{'title': 'Survey', 'link': survey_link}]
+            if post_mortem_link:
+                bookmarks += [{'title': 'Post Mortem des formations', 'link': post_mortem_link}]
 
             if args.dry_run:
                 cmd = f"slack.update_channel_bookmarks({slack_channel_name}, {bookmarks})"
