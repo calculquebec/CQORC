@@ -167,7 +167,24 @@ for course in courses:
 
                         messages += [{'time': time, 'message': text}]
 
-                    if config['slack']
+                    if session['creation_grappe'] == "oui":
+                        time = datetime.datetime.now()
+                        message = f"C'est la responsabilité de {analysts} de créer la grappe pour ce cours."
+                        messages += [{'time': time, 'message': text}]
+                    else:
+                        time = datetime.datetime.now()
+                        message = f"La grappe a déjà été créé par {analysts}. Elle sera réutilisée pour ce cours."
+                        messages += [{'time': time, 'message': text}]
+                    
+                    if session['destruction_grappe'] == "oui":
+                        time = end_time + datetime.timedelta(hours=24)
+                        message = f"{analysts}, vous pouvez détruire la grappe."
+                        messages += [{'time': time, 'message': text}]
+                    else:
+                        time = end_time + datetime.timedelta(hours=24)
+                        message = f"{analysts}, la grappe sera réutilisée pour un autre cours. Merci de ne pas la détruire. "
+                        messages += [{'time': time, 'message': text}]
+
 
 
             for message in messages:
