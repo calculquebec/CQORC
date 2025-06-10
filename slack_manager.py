@@ -142,7 +142,6 @@ for course in courses:
             magic_castle_link = slack.get_channel_bookmark_link(slack_channel_name, "Magic Castle")
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
-
             message_prefixes = []
             for key in config['slack']:
                 key_parts = key.split('_')
@@ -155,6 +154,7 @@ for course in courses:
                 for session in course['sessions']:
                     start_time = to_iso8061(session['start_date'])
                     end_time = to_iso8061(session['end_date'])
+                    analysts = calendar.get_equipe_techno(session['course_id'])
 
                     if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
                         time = start_time
@@ -166,6 +166,9 @@ for course in courses:
                             time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_now']))
 
                         messages += [{'time': time, 'message': text}]
+
+                    if config['slack']
+
 
             for message in messages:
                 if args.dry_run:
