@@ -64,6 +64,11 @@ class Calendar:
         for session in self.courses[course_id]['sessions']:
             if session['start_date'] == session_start_date:
                 session['private_gcal_id'] = private_gcal_id
+    
+    def set_post_mortem_private_gcal_id(self, course_id, session_start_date, post_mortem_private_gcal_id):
+        for session in self.courses[course_id]['sessions']:
+            if session['start_date'] == session_start_date:
+                session['post_mortem_private_gcal_id'] = post_mortem_private_gcal_id
 
     def update_spreadsheet(self):
         values = [self.header]

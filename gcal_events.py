@@ -19,6 +19,8 @@ parser.add_argument("--all", default=False, action='store_true', help="Act for a
 parser.add_argument("--create", default=False, action='store_true', help="Create events")
 parser.add_argument("--update", default=False, action='store_true', help="Update events")
 parser.add_argument("--delete", default=False, action='store_true', help="Delete events")
+parser.add_argument("--course", default=False, action='store_true', help="Course event")
+parser.add_argument("--post_mortem", default=False, action='store_true', help="Post_mortem event")
 parser.add_argument("--no-notifications", default=False, action='store_true', help="Do not send update notifications to attendees")
 parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run")
 args = parser.parse_args()
@@ -55,59 +57,83 @@ else:
 
 for session in sessions:
     try:
-        title = f"{session['code']} - {session['title']}"
         attendees = [trainers.calendar_email(key) for key in get_trainer_keys(session, ['instructor', 'host', 'assistants'])]
-
-        start_time = to_iso8061(session['start_date']) + datetime.timedelta(minutes=start_offset_minutes)
-        end_time = to_iso8061(session['end_date'])
-
-        description = f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens"""
+        webinar = zoom.get_webinar(webinar_id = session['zoom_id'])
+        zoom_link = webinar['join_url']
+        event_dict = {
+            "course": {
+                "status": args.course,
+                "title": f"{session['code']} - {session['title']}",
+                "start_time": to_iso8061(session['start_date']) + datetime.timedelta(minutes=start_offset_minutes),
+                "end_time": to_iso8061(session['end_date']),
+                "description": f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens""",
+                "session_id": 'private_gcal_id',
+                "set_function": calendar.set_private_gcal_id
+            },
+            "post_mortem": {
+                "status": args.post_mortem,
+                "title": f"{session['code']} - {session['title']} - post mortem",
+                "start_time": to_iso8061(session['end_date']),
+                "end_time":  to_iso8061(session['end_date']) + datetime.timedelta(minutes=30),
+                "description": f"""Voici le lien Zoom <a href="{zoom_link}">{zoom_link}</a>, ou encore le canal sur Slack pour les liens et le google doc post mortem""",
+                "session_id": 'post_mortem_private_gcal_id',
+                "set_function": calendar.set_post_mortem_private_gcal_id
+            }
+        }
 
         if args.create:
-            if session['private_gcal_id']:
-                event_id = session['private_gcal_id']
-                print(f"Calendar ID found: {session['private_gcal_id']}, not creating a new event")
-            elif args.dry_run:
-                cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                print(f"Dry-run: would run {cmd}")
-            else:
-                event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-                calendar.set_private_gcal_id(session['course_id'], session['start_date'], event['id'])
-                calendar.update_spreadsheet()
+            for key, value in event_dict.items():
+                if value['status']:
+                    if session[value['session_id']]:
+                        event_id = session[value['session_id']]
+                        print(f"Calendar ID found: {session[value['session_id']]}, not creating a new event")
+                    elif args.dry_run:
+                        cmd = f"gcal.create_event({value['start_time'].isoformat()}, {value['end_time'].isoformat()}, {value['title']}, {value['description']}, {attendees}, send_updates={send_updates})"
+                        print(f"Dry-run: would run {cmd}")
+                    else:
+                        event = gcal.create_event(value['start_time'].isoformat(), value['end_time'].isoformat(), value['title'], value['description'], attendees, send_updates=send_updates)                            
+                        value['set_function'](session['course_id'], session['start_date'], event['id'])
+                        calendar.update_spreadsheet()
 
         elif args.update:
-            if session['private_gcal_id']:
-                event_id = session['private_gcal_id']
-            else:
-                existing_events = gcal.get_events_by_date(start_time)
-                if len(existing_events) != 1:
-                    print("Number of existing events found different than 1. Case not handled. Exiting")
-                    exit(1)
-                event_id = existing_events[0]['id']
+            for key, value in event_dict.items():
+                if value['status']:
+                    if session[value['session_id']]:
+                        event_id = session[value['session_id']]
+                    else:
+                        existing_events = gcal.get_events_by_date(value['start_time'])
+                        if len(existing_events) != 1:
+                            print("Number of existing events found different than 1. Case not handled. Exiting")
+                            exit(1)
+                        event_id = existing_events[0]['id']
 
-            if args.dry_run:
-                cmd = f"gcal.update_event({event_id}, {start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
-                print(f"Dry-run: would run {cmd}")
-            else:
-                gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+                    if args.dry_run:
+                        cmd = f"gcal.update_event({event_id}, {value['start_time'].isoformat()}, {value['end_time'].isoformat()}, {value['title']}, {value['description']}, {attendees}, send_updates={send_updates})"
+                        print(f"Dry-run: would run {cmd}")
+                    else:
+                        gcal.update_event(event_id, value['start_time'].isoformat(), value['end_time'].isoformat(), value['title'], value['description'], attendees, send_updates=send_updates)
+
         elif args.delete:
-            if session['private_gcal_id']:
-                event_id = session['private_gcal_id']
-            else:
-                existing_events = gcal.get_events_by_date(start_time)
-                if len(existing_events) != 1:
-                    print("Number of existing events found different than 1. Case not handled. Exiting")
-                    exit(1)
+            for key, value in event_dict.items():
+                if value['status']:
+                    if session[value['session_id']]:
+                        event_id = session[value['session_id']]
+                    else:
+                        existing_events = gcal.get_events_by_date(value['start_time'])
+                        if len(existing_events) != 1:
+                            print("Number of existing events found different than 1. Case not handled. Exiting")
+                            exit(1)
 
-                event_id = existing_events[0]['id']
+                        event_id = existing_events[0]['id']
 
-            if args.dry_run:
-                cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
-                print(f"Dry-run: would run {cmd}")
-            else:
-                gcal.delete_event(event_id, send_updates=send_updates)
-                calendar.set_private_gcal_id(session['course_id'], session['start_date'], '')
-                calendar.update_spreadsheet()
+                    if args.dry_run:
+                        cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
+                        print(f"Dry-run: would run {cmd}")
+                    else:
+                        gcal.delete_event(event_id, send_updates=send_updates)
+                        value['set_function'](session['course_id'], session['start_date'], '')
+                        calendar.update_spreadsheet()   
+
     except Exception as error:
         print(f"Error encountered when processing session {session}: %s" % error)
 
