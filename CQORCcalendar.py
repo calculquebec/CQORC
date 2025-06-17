@@ -55,20 +55,10 @@ class Calendar:
         for session in self.courses[course_id]['sessions']:
             session['slack_channel'] = slack_channel
 
-    def set_public_gcal_id(self, course_id, session_start_date, public_gcal_id):
+    def set_gcal_id(self, course_id, session_start_date, gcal_id,  gcal_id_type=""):
         for session in self.courses[course_id]['sessions']:
             if session['start_date'] == session_start_date:
-                session['public_gcal_id'] = public_gcal_id
-
-    def set_private_gcal_id(self, course_id, session_start_date, private_gcal_id):
-        for session in self.courses[course_id]['sessions']:
-            if session['start_date'] == session_start_date:
-                session['private_gcal_id'] = private_gcal_id
-    
-    def set_post_mortem_private_gcal_id(self, course_id, session_start_date, post_mortem_private_gcal_id):
-        for session in self.courses[course_id]['sessions']:
-            if session['start_date'] == session_start_date:
-                session['post_mortem_private_gcal_id'] = post_mortem_private_gcal_id
+                session[gcal_id_type] = gcal_id
 
     def update_spreadsheet(self):
         values = [self.header]

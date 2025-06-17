@@ -129,7 +129,7 @@ Plan:
                 print(f"Dry-run: would run {cmd}")
             else:
                 event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
-                calendar.set_public_gcal_id(session['course_id'], session['start_date'], event['id'])
+                calendar.set_gcal_id(session['course_id'], session['start_date'], event['id'], "public_gcal_id")
                 calendar.update_spreadsheet()
 
         elif args.update:
@@ -163,7 +163,7 @@ Plan:
                 print(f"Dry-run: would run {cmd}")
             else:
                 gcal.delete_event(event_id, send_updates=send_updates)
-                calendar.set_public_gcal_id(session['course_id'], session['start_date'], '')
+                calendar.set_gcal_id(session['course_id'], session['start_date'], '', "public_gcal_id")
                 calendar.update_spreadsheet()
 
     except Exception as e:
