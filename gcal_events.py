@@ -78,7 +78,8 @@ for session in sessions:
     try:
         attendees = [trainers.calendar_email(key) for key in get_trainer_keys(session, ['instructor', 'host', 'assistants'])]
         webinar = zoom.get_webinar(webinar_id = session['zoom_id'])
-        zoom_link = webinar['join_url']
+        google_meet_link = config['google.calendar']['google_meet_link']
+        post_mortem_doc_link = config['slack']['post_mortem_link']
         event_dict = {
             "course": {
                 "title": f"{session['code']} - {session['title']}",
@@ -91,7 +92,7 @@ for session in sessions:
                 "title": f"{session['code']} - {session['title']} - post mortem",
                 "start_time": to_iso8061(session['start_date']),
                 "end_time":  to_iso8061(session['end_date']) + timedelta(minutes=30),
-                "description": f"""Voici le lien Zoom <a href="{zoom_link}">{zoom_link}</a>, ou encore le canal sur Slack pour les liens et le google doc post mortem""",
+                "description": f"""Voici le lien Google Meet <a href="{google_meet_link}">{google_meet_link}</a> et le Google doc post-mortem <a href="{post_mortem_doc_link}">{post_mortem_doc_link}</a>. Le google doc post-mortem se retrouve aussi sur le canal Slack""",
                 "session_id": 'post_mortem_private_gcal_id'
             }
         }
