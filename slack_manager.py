@@ -83,7 +83,7 @@ for course in courses:
                 calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.invites:
-            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants'])]
+            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
 
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
@@ -142,7 +142,6 @@ for course in courses:
             magic_castle_link = slack.get_channel_bookmark_link(slack_channel_name, "Magic Castle")
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
-
             message_prefixes = []
             for key in config['slack']:
                 key_parts = key.split('_')
@@ -155,6 +154,7 @@ for course in courses:
                 for session in course['sessions']:
                     start_time = to_iso8061(session['start_date'])
                     end_time = to_iso8061(session['end_date'])
+                    analysts = calendar.get_equipe_techno(session['course_id'])
 
                     if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
                         time = start_time
@@ -166,6 +166,26 @@ for course in courses:
                             time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_now']))
 
                         messages += [{'time': time, 'message': text}]
+
+                    if session['creation_grappe'] == "oui":
+                        time = datetime.datetime.now()
+                        message = f"C'est la responsabilité de {analysts} de créer la grappe pour ce cours."
+                        messages += [{'time': time, 'message': text}]
+                    else:
+                        time = datetime.datetime.now()
+                        message = f"La grappe a déjà été créé par {analysts}. Elle sera réutilisée pour ce cours."
+                        messages += [{'time': time, 'message': text}]
+                    
+                    if session['destruction_grappe'] == "oui":
+                        time = end_time + datetime.timedelta(hours=24)
+                        message = f"{analysts}, vous pouvez détruire la grappe."
+                        messages += [{'time': time, 'message': text}]
+                    else:
+                        time = end_time + datetime.timedelta(hours=24)
+                        message = f"{analysts}, la grappe sera réutilisée pour un autre cours. Merci de ne pas la détruire. "
+                        messages += [{'time': time, 'message': text}]
+
+
 
             for message in messages:
                 if args.dry_run:
