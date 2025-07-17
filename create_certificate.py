@@ -392,7 +392,7 @@ if __name__ == '__main__':
     parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
     parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
     parser.add_argument("--event_id", help="EventBrite event id", required=True)
-    parser.add_argument("--certificate_svg_tplt_dir",default="./Attestation_template", help="Directory that holds certificate templates.")
+    parser.add_argument("--certificate_svg_tplt_dir",default="./secrets/Attestation_template", help="Directory that holds certificate templates.")
     parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
     parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
     parser.add_argument("--email_tplt_dir", help="Email template directory", default="./email_template")
