@@ -1,0 +1,3 @@
+cairosvg
+jinja2
+unidecode
