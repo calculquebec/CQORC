@@ -5,6 +5,7 @@ import interfaces.google.GCalInterface as GCalInterface
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import yaml
 import CQORCcalendar
+import re
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import extract_course_code_from_title
@@ -111,6 +112,13 @@ for session in sessions:
 
 Plan:
 {plan}
+
+Tags:
+Presence: {re.search(r'\[\s*([^\],]+)', session['title'])}
+Cost basis: {session['cost_basis']}
+Language: francais
+Registration URL: {registration_url}
+
 """
         else:
             description = f"""Registration:: {registration_url}
@@ -119,6 +127,13 @@ Plan:
 
 Plan:
 {plan}
+
+Tags:
+Presence: {re.search(r'\[\s*([^\],]+)', session['title'])}
+Cost basis: {session['cost_basis']}
+Language: english
+Registration URL: {registration_url}
+
 """
         if args.create:
             if session['public_gcal_id']:
