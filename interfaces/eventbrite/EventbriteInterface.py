@@ -137,7 +137,6 @@ class EventbriteInterface(eb.Eventbrite):
             "end_date": end_date.astimezone(timezone.utc).strftime(self.UTC_FMT),
             'timezone': tz,
             "summary": summary,
-            "capacity": 100,
         }
 
         # Create the event
