@@ -33,6 +33,10 @@ class Calendar:
 
     def get_courses(self):
         return self.courses.values()
+    
+    def get_equipe_techno(self, course_id):
+        for session in self.courses[course_id]['sessions']:
+            return session['equipe_techno']
 
     def keys(self):
         return self.courses.keys()
