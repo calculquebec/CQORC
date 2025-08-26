@@ -167,29 +167,29 @@ for course in courses:
             analysts_tagged = format_tag(equipe_techno_id_list)
 
             for prefix in message_prefixes:
+                # Evalutate text message
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
+
                 for session in course['sessions']:
+                    # Evaluate the condition
+                    if f'{prefix}_condition' in config['slack']:
+                        if not eval(config['slack'][f'{prefix}_condition']):
+                            continue
+
                     start_time = to_iso8061(session['start_date'])
                     end_time = to_iso8061(session['end_date'])
+
                     if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
-                        time = None
+                        time = start_time
+                        # Applying offsets
                         if f'{prefix}_offset_start' in config['slack']:
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
                         elif f'{prefix}_offset_end' in config['slack']:
                             time = end_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_end']))
                         elif f'{prefix}_offset_now' in config['slack']:
                             time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_now']))
-                        elif f'{prefix}_offset1_now' in config['slack'] and session['creation_grappe'] == "oui":
-                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset1_now']))
-                        elif f'{prefix}_offset2_now' in config['slack'] and session['creation_grappe'] == "non":
-                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset2_now']))
-                        elif f'{prefix}_offset1_24h' in config['slack'] and session['destruction_grappe'] == "oui":
-                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset1_24h']))
-                        elif f'{prefix}_offset2_24h' in config['slack'] and session['destruction_grappe'] == "non":
-                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset2_24h']))
 
-                        if time is not None:
-                            messages += [{'time': time, 'message': text}]
+                        messages += [{'time': time, 'message': text}]
 
             for message in messages:
                 if args.dry_run:
