@@ -41,6 +41,15 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 # get the events from the working calendar in the Google spreadsheets
 calendar = CQORCcalendar.Calendar(config, args)
 
+# function to add the @ sign and <> to the user_id of the analyst before to post in slack.
+def format_tag(analysts):
+    tag = [f"<@{user_id.strip()}>" for user_id in analysts]
+    return (
+    tag[0] if len(tag) == 1 else
+    " et ".join(tag) if len(tag) == 2 else
+    ", ".join(tag[:-1]) + " et " + tag[-1]
+    )
+
 # keep only events on the date listed
 if args.course_id:
     if args.course_id in calendar.keys():
@@ -84,7 +93,6 @@ for course in courses:
 
         if args.invites:
             attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
-
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
                 print(f"Dry-run: would run {cmd}")
@@ -149,43 +157,39 @@ for course in courses:
                     message_prefixes += ['_'.join(key_parts[0:2])]
 
             messages = []
+            equipe_techno_email = [trainers.slack_email(key.split()[0]) for key in get_trainer_keys(course, ['equipe_techno'])]
+            equipe_techno_id_list = []
+        
+            for email in equipe_techno_email:
+                equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
+                equipe_techno_id_list.append(equipe_techno_id)
+
+            analysts_tagged = format_tag(equipe_techno_id_list)
+
             for prefix in message_prefixes:
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
                 for session in course['sessions']:
                     start_time = to_iso8061(session['start_date'])
                     end_time = to_iso8061(session['end_date'])
-                    analysts = calendar.get_equipe_techno(session['course_id'])
-
                     if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
-                        time = start_time
+                        time = None
                         if f'{prefix}_offset_start' in config['slack']:
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
                         elif f'{prefix}_offset_end' in config['slack']:
                             time = end_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_end']))
                         elif f'{prefix}_offset_now' in config['slack']:
                             time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_now']))
+                        elif f'{prefix}_offset1_now' in config['slack'] and session['creation_grappe'] == "oui":
+                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset1_now']))
+                        elif f'{prefix}_offset2_now' in config['slack'] and session['creation_grappe'] == "non":
+                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset2_now']))
+                        elif f'{prefix}_offset1_24h' in config['slack'] and session['destruction_grappe'] == "oui":
+                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset1_24h']))
+                        elif f'{prefix}_offset2_24h' in config['slack'] and session['destruction_grappe'] == "non":
+                            time = datetime.datetime.now() + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset2_24h']))
 
-                        messages += [{'time': time, 'message': text}]
-
-                    if session['creation_grappe'] == "oui":
-                        time = datetime.datetime.now()
-                        message = f"C'est la responsabilité de {analysts} de créer la grappe pour ce cours."
-                        messages += [{'time': time, 'message': text}]
-                    else:
-                        time = datetime.datetime.now()
-                        message = f"La grappe a déjà été créé par {analysts}. Elle sera réutilisée pour ce cours."
-                        messages += [{'time': time, 'message': text}]
-                    
-                    if session['destruction_grappe'] == "oui":
-                        time = end_time + datetime.timedelta(hours=24)
-                        message = f"{analysts}, vous pouvez détruire la grappe."
-                        messages += [{'time': time, 'message': text}]
-                    else:
-                        time = end_time + datetime.timedelta(hours=24)
-                        message = f"{analysts}, la grappe sera réutilisée pour un autre cours. Merci de ne pas la détruire. "
-                        messages += [{'time': time, 'message': text}]
-
-
+                        if time is not None:
+                            messages += [{'time': time, 'message': text}]
 
             for message in messages:
                 if args.dry_run:
