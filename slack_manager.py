@@ -41,6 +41,15 @@ zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom'][
 # get the events from the working calendar in the Google spreadsheets
 calendar = CQORCcalendar.Calendar(config, args)
 
+# function to add the @ sign and <> to the user_id of the analyst before to post in slack.
+def format_tag(analysts):
+    tag = [f"<@{user_id.strip()}>" for user_id in analysts]
+    return (
+    tag[0] if len(tag) == 1 else
+    " et ".join(tag) if len(tag) == 2 else
+    ", ".join(tag[:-1]) + " et " + tag[-1]
+    )
+
 # keep only events on the date listed
 if args.course_id:
     if args.course_id in calendar.keys():
@@ -83,8 +92,7 @@ for course in courses:
                 calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
 
         if args.invites:
-            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants'])]
-
+            attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
             if args.dry_run:
                 cmd = f"slack.invite_to_channel({slack_channel_name}, {attendees})"
                 print(f"Dry-run: would run {cmd}")
@@ -142,7 +150,6 @@ for course in courses:
             magic_castle_link = slack.get_channel_bookmark_link(slack_channel_name, "Magic Castle")
             zoom_user_link = slack.get_channel_bookmark_link(slack_channel_name, "Zoom URL Participants")
             survey_link = slack.get_channel_bookmark_link(slack_channel_name, "Survey")
-
             message_prefixes = []
             for key in config['slack']:
                 key_parts = key.split('_')
@@ -150,14 +157,31 @@ for course in courses:
                     message_prefixes += ['_'.join(key_parts[0:2])]
 
             messages = []
+            equipe_techno_email = [trainers.slack_email(key.split()[0]) for key in get_trainer_keys(course, ['equipe_techno'])]
+            equipe_techno_id_list = []
+        
+            for email in equipe_techno_email:
+                equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
+                equipe_techno_id_list.append(equipe_techno_id)
+
+            analysts_tagged = format_tag(equipe_techno_id_list)
+
             for prefix in message_prefixes:
+                # Evalutate text message
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
+
                 for session in course['sessions']:
+                    # Evaluate the condition
+                    if f'{prefix}_condition' in config['slack']:
+                        if not eval(config['slack'][f'{prefix}_condition']):
+                            continue
+
                     start_time = to_iso8061(session['start_date'])
                     end_time = to_iso8061(session['end_date'])
 
                     if start_time == to_iso8061(first_session['start_date']) or config['slack'][f'{prefix}_multidays'] == "True":
                         time = start_time
+                        # Applying offsets
                         if f'{prefix}_offset_start' in config['slack']:
                             time = start_time + datetime.timedelta(minutes=int(config['slack'][f'{prefix}_offset_start']))
                         elif f'{prefix}_offset_end' in config['slack']:
