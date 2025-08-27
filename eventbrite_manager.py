@@ -82,7 +82,7 @@ def update_html(description, content, instructor_name):
         else:
             # If the content is empty or of an unexpected type
             new_prereqs = soup.new_tag("p")
-            new_prereqs.string = "Aucun prérequis spécifié."
+            new_prereqs.string = ""
 
     prerequis.replace_with(new_prereqs)
 
