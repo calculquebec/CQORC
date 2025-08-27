@@ -62,13 +62,29 @@ def update_html(description, content, instructor_name):
     if desc:
         desc.string = desc.string.replace("[[DESCRIPTION]]", content["description"])
 
+    # Normalize dictionary keys to avoid case sensitivity issues
+    content = {k.lower(): v for k, v in content.items()}
+
+    # Retrieve the prerequisites content
+    prereq_content = content.get("prerequisites", None)
+
     if prerequis:
-        new_prereqs = soup.new_tag("ul")
-        for i in content["prerequisites"]:
-            new_li = soup.new_tag("li")
-            new_li.string = i
-            new_prereqs.append(new_li)
-        prerequis.replace_with(new_prereqs)
+        # Create an HTML element based on the content type
+        if isinstance(prereq_content, str):
+            new_prereqs = soup.new_tag("p")
+            new_prereqs.string = prereq_content
+        elif isinstance(prereq_content, list):
+            new_prereqs = soup.new_tag("ul")
+            for i in prereq_content:
+                new_li = soup.new_tag("li")
+                new_li.string = i
+                new_prereqs.append(new_li)
+        else:
+            # If the content is empty or of an unexpected type
+            new_prereqs = soup.new_tag("p")
+            new_prereqs.string = "Aucun prérequis spécifié."
+
+    prerequis.replace_with(new_prereqs)
 
     if plan:
         new_plan = soup.new_tag("ul")
