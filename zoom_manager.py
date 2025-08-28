@@ -63,7 +63,7 @@ for course in courses:
         # for multi-session courses, the duration of the webinar must be from the start to the end
         start_time = min([to_iso8061(session['start_date']) for session in course['sessions']])
         end_time = max([to_iso8061(session['end_date']) for session in course['sessions']])
-        duration = (end_time - start_time).total_seconds()/3600
+        duration = (end_time - start_time).total_seconds()/60
 
         if args.create:
             if first_session['zoom_id']:
@@ -113,7 +113,7 @@ for course in courses:
             settings['question_and_answer'] = {'allow_submit_questions': True, 'enable': True, 'attendees_can_upvote': True, 'attendees_can_comment': True, 'allow_anonymous_questions':False }
             settings['approval_type'] = 0
             params['settings'] = settings
-            params['duration'] = str(int(duration*60))
+            params['duration'] = str(int(duration))
             params['start_time'] = start_time.astimezone(datetime.timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
             pp = pprint.PrettyPrinter(indent=4)
             print("Params:")
