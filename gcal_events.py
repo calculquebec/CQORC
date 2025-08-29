@@ -90,7 +90,7 @@ for session in sessions:
             },
             "post_mortem": {
                 "title": f"{session['code']} - {session['title']} - post mortem",
-                "start_time": to_iso8061(session['start_date']),
+                "start_time": to_iso8061(session['end_date']),
                 "end_time":  to_iso8061(session['end_date']) + timedelta(minutes=30),
                 "description": f"""Voici le lien Google Meet <a href="{google_meet_link}">{google_meet_link}</a> et le Google doc post-mortem <a href="{post_mortem_doc_link}">{post_mortem_doc_link}</a>. Le google doc post-mortem se retrouve aussi sur le canal Slack""",
                 "session_id": 'post_mortem_private_gcal_id'
@@ -103,8 +103,10 @@ for session in sessions:
             event_list.append(event_dict['post_mortem'])
 
         if args.create:
+            if not latest_session:
+                latest_session = [session]
             for event_type in event_list:
-                if event_type['session_id'] == 'private_gcal_id' or (event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['start_date'])):
+                if event_type['session_id'] == 'private_gcal_id' or (event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['end_date'])):
                     if session[event_type['session_id']]:
                         event_id = session[event_type['session_id']]
                         print(f"Calendar ID found: {session[event_type['session_id']]}, not creating a new event")
@@ -117,15 +119,17 @@ for session in sessions:
                         calendar.update_spreadsheet()
 
         elif args.update:
+            if not latest_session:
+                latest_session = [session]
             for event_type in event_list:
                 if session[event_type['session_id']]:
                     event_id = session[event_type['session_id']]
                 else:
                     if event_type['session_id'] == 'private_gcal_id':
                         print(f"This private Google Calendar event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) cannot be updated because it has not been created.")  
-                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] != to_iso8061(latest_session[0]['start_date']):
+                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] != to_iso8061(latest_session[0]['end_date']):
                         print(f"This event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) has no post-mortem Google Calendar because it is not the last session of the event. It couldn't be updated.")
-                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['start_date']):
+                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['end_date']):
                         print(f"This post mortem event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) cannot be updated because it has not been created.")
                     event_id = ""
 
@@ -139,15 +143,17 @@ for session in sessions:
                         gcal.update_event(event_id, event_type['start_time'].isoformat(), event_type['end_time'].isoformat(), event_type['title'], event_type['description'], attendees, send_updates=send_updates)
 
         elif args.delete:
+            if not latest_session:
+                latest_session = [session]
             for event_type in event_list:
                 if session[event_type['session_id']]:
                     event_id = session[event_type['session_id']]
                 else:
                     if event_type['session_id'] == 'private_gcal_id':
                         print(f"This private Google Calendar event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) cannot be deleted because it does not exist.")  
-                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] != to_iso8061(latest_session[0]['start_date']):
+                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] != to_iso8061(latest_session[0]['end_date']):
                         print(f"This event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) has no post-mortem Google Calendar entry because it is not the last session of the event. It cannot be deleted because it does not exist.")
-                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['start_date']):
+                    elif event_type['session_id'] == 'post_mortem_private_gcal_id' and event_type['start_time'] == to_iso8061(latest_session[0]['end_date']):
                         print(f"This post-mortem event (course id : {session['course_id']}, start date: {event_type['start_time'].isoformat()}) cannot be deleted because it does not exist.")
                     event_id = ""
 
