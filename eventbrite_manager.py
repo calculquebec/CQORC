@@ -68,7 +68,7 @@ def update_html(description, content, instructor_name):
     # Retrieve the prerequisites content
     prereq_content = content.get("prerequisites", None)
 
-    if prerequis:
+    if prerequis and prereq_content:
         # Create an HTML element based on the content type
         if isinstance(prereq_content, str):
             new_prereqs = soup.new_tag("p")
@@ -79,12 +79,11 @@ def update_html(description, content, instructor_name):
                 new_li = soup.new_tag("li")
                 new_li.string = i
                 new_prereqs.append(new_li)
-        else:
-            # If the content is empty or of an unexpected type
-            new_prereqs = soup.new_tag("p")
-            new_prereqs.string = ""
 
-    prerequis.replace_with(new_prereqs)
+        prerequis.replace_with(new_prereqs)
+    # Remove the HTML [[PREREQS]] if no content is present.
+    elif prerequis:
+        prerequis.decompose()
 
     if plan:
         new_plan = soup.new_tag("ul")
