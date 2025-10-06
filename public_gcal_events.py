@@ -106,6 +106,7 @@ for session in sessions:
             title = eb_event['name']['text']
 
         if session['language'] == "FR":
+            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -114,13 +115,14 @@ Plan:
 {plan}
 
 Tags:
-Presence: {re.search(r'\[\s*([^\],]+)', session['title'])}
+Presence: {presence}
 Cost basis: {session['cost_basis']}
 Language: francais
 Registration URL: {registration_url}
 
 """
         else:
+            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
             description = f"""Registration:: {registration_url}
 
 {summary}
@@ -129,7 +131,7 @@ Plan:
 {plan}
 
 Tags:
-Presence: {re.search(r'\[\s*([^\],]+)', session['title'])}
+Presence: {presence}
 Cost basis: {session['cost_basis']}
 Language: english
 Registration URL: {registration_url}
