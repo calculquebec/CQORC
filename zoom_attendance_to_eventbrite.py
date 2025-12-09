@@ -34,7 +34,7 @@ args = parser.parse_args()
 global_config = get_config(args)
 
 # get the events from the working calendar in the Google spreadsheets
-calendar = CQORCcalendar.Calendar(config, args)
+calendar = CQORCcalendar.Calendar(global_config, args)
 course = None
 if args.course_id:
     course = calendar[args.course_id]
