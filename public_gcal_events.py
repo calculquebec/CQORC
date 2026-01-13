@@ -107,10 +107,10 @@ for session in sessions:
 
         if session['language'] == "FR":
             presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "U.Sherbrooke":
-                presence = "onsite"
+            if presence == "online" or presence == "en ligne":
+                presence = "online"
             else:
-                presence = "online"        
+                presence = "onsite"        
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -127,10 +127,10 @@ Registration URL: {registration_url}
 """
         else:
             presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "U.Sherbrooke":
-                presence = "onsite"
-            else:
+            if presence == "online" or presence == "en ligne":
                 presence = "online"
+            else:
+                presence = "onsite"
             description = f"""Registration: {registration_url}
 
 {summary}
