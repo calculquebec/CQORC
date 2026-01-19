@@ -76,6 +76,7 @@ for course in courses:
         survey_link = get_survey_link(config, locale, title, date)
 
         post_mortem_link = config['slack']['post_mortem_link']
+        eb_course_link = config['slack']['eb_course_link']
 
         # if is documented, use that, otherwise create it
         slack_channel_name = first_session['slack_channel']
@@ -117,13 +118,13 @@ for course in courses:
                 bookmarks += [{'title': 'Survey', 'link': survey_link}]
             if post_mortem_link:
                 bookmarks += [{'title': 'Post Mortem des formations', 'link': post_mortem_link}]
-
+            if eb_course_link:
+                bookmarks += [{'title': 'Liens à partager vers nos prochaines formations', 'link': eb_course_link}]
             if args.dry_run:
                 cmd = f"slack.update_channel_bookmarks({slack_channel_name}, {bookmarks})"
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.update_channel_bookmarks(slack_channel_name, bookmarks)
-
 
         if args.archive:
             if args.dry_run:
