@@ -222,8 +222,12 @@ if __name__ == "__main__":
 
         # Delete the event
         if args.delete:
-            eb.delete_event(eventid)
-            calendar.set_eventbrite_id(first_session['course_id'], '')
-            print(f'Successfully deleted {eventid}')
+            if args.dry_run:
+                cmd = f"eb.delete_event {eventid}, calendar.set_eventbrite_id({first_session['course_id']}, {''}), for this course: {first_session['title']} "
+                print(f"Dry-run: would run {cmd}")
+            else:
+                eb.delete_event(eventid)
+                calendar.set_eventbrite_id(first_session['course_id'], '')
+                print(f'Successfully deleted {eventid}')
 
     calendar.update_spreadsheet()
