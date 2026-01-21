@@ -159,15 +159,26 @@ for course in courses:
 
             messages = []
             equipe_techno_email = [trainers.slack_email(key.split()[0]) for key in get_trainer_keys(course, ['equipe_techno'])]
-            equipe_techno_id_list = []
-        
-            for email in equipe_techno_email:
-                equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
-                equipe_techno_id_list.append(equipe_techno_id)
 
-            analysts_tagged = format_tag(equipe_techno_id_list)
+            if equipe_techno_email:
+                equipe_techno_id_list = []
+        
+                for email in equipe_techno_email:
+                    equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
+                    equipe_techno_id_list.append(equipe_techno_id)
+
+                analysts_tagged = format_tag(equipe_techno_id_list)
 
             for prefix in message_prefixes:
+                if not equipe_techno_email and prefix in {
+                    "message_creationoui",    
+                    "message_creationnon",    
+                    "message_destructionoui",    
+                    "message_destructionnon",
+                    "message_debut",
+                    "message_jouravant"
+                }:
+                    continue
                 # Evalutate text message
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
 
