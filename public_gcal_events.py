@@ -107,6 +107,10 @@ for session in sessions:
 
         if session['language'] == "FR":
             presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
+            if presence == "online" or presence == "en ligne":
+                presence = "online"
+            else:
+                presence = "onsite"        
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -117,13 +121,17 @@ Plan:
 Tags:
 Presence: {presence}
 Cost basis: {session['cost_basis']}
-Language: francais
+Language: french
 Registration URL: {registration_url}
 
 """
         else:
             presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            description = f"""Registration:: {registration_url}
+            if presence == "online" or presence == "en ligne":
+                presence = "online"
+            else:
+                presence = "onsite"
+            description = f"""Registration: {registration_url}
 
 {summary}
 
@@ -138,12 +146,12 @@ Registration URL: {registration_url}
 
 """
         if args.create:
-            if session['public_gcal_id']:
-                event_id = session['public_gcal_id']
-                print(f"Calendar ID found: {session['public_gcal_id']}, not creating a new event")
-            elif args.dry_run:
+            if args.dry_run:
                 cmd = f"gcal.create_event({start_time.isoformat()}, {end_time.isoformat()}, {title}, {description}, {attendees}, send_updates={send_updates})"
                 print(f"Dry-run: would run {cmd}")
+            elif session['public_gcal_id']:
+                event_id = session['public_gcal_id']
+                print(f"Calendar ID found: {session['public_gcal_id']}, not creating a new event")
             else:
                 event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
                 calendar.set_gcal_id(session['course_id'], session['start_date'], event['id'], "public_gcal_id")
