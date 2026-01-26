@@ -77,6 +77,7 @@ for course in courses:
         survey_link = get_survey_link(config, locale, title, date)
 
         post_mortem_link = config['slack']['post_mortem_link']
+        eb_course_link = config['slack']['eb_course_link']
 
         # if is documented, use that, otherwise create it
         slack_channel_name = first_session['slack_channel']
@@ -122,13 +123,13 @@ for course in courses:
                 bookmarks += [{'title': 'Survey', 'link': survey_link}]
             if post_mortem_link:
                 bookmarks += [{'title': 'Post Mortem des formations', 'link': post_mortem_link}]
-
+            if eb_course_link:
+                bookmarks += [{'title': 'Liens à partager vers nos prochaines formations', 'link': eb_course_link}]
             if args.dry_run:
                 cmd = f"slack.update_channel_bookmarks({slack_channel_name}, {bookmarks})"
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.update_channel_bookmarks(slack_channel_name, bookmarks)
-
 
         if args.archive:
             if args.dry_run:
@@ -163,15 +164,26 @@ for course in courses:
 
             messages = []
             equipe_techno_email = [trainers.slack_email(key.split()[0]) for key in get_trainer_keys(course, ['equipe_techno'])]
-            equipe_techno_id_list = []
-        
-            for email in equipe_techno_email:
-                equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
-                equipe_techno_id_list.append(equipe_techno_id)
 
-            analysts_tagged = format_tag(equipe_techno_id_list)
+            if equipe_techno_email:
+                equipe_techno_id_list = []
+        
+                for email in equipe_techno_email:
+                    equipe_techno_id = ''.join(slack.get_user_id(email, next_cursor=None))
+                    equipe_techno_id_list.append(equipe_techno_id)
+
+                analysts_tagged = format_tag(equipe_techno_id_list)
 
             for prefix in message_prefixes:
+                if not equipe_techno_email and prefix in {
+                    "message_creationoui",    
+                    "message_creationnon",    
+                    "message_destructionoui",    
+                    "message_destructionnon",
+                    "message_debut",
+                    "message_jouravant"
+                }:
+                    continue
                 # Evalutate text message
                 text = eval('f' + repr(config['slack'][f'{prefix}_template']))
 
