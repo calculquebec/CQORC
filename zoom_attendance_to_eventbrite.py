@@ -47,7 +47,7 @@ webinars = []
 if args.zoom_id:
     webinars = zoom.get_webinars(ids = [int(args.zoom_id)])
 elif course:
-    webinars = zoom.get_webinar(ids = [int(course[0]['zoom_id'])])
+    webinars = zoom.get_webinars(ids = [int(course['sessions'][0]['zoom_id'])])
 elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
@@ -65,10 +65,32 @@ if args.verbose:
         print(f"{v}")
     print("===============")
 
-zoom_participants = {p['user_email']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
+zoom_participants = {p['name']: {'user_email': p['user_email'], 'name': p['name'], 'duration': 0} for p in participants_records}
+print(f"{zoom_participants}")
 # calculating the total attendance duration for each attendee
-for r in participants_records:
-    zoom_participants[r['user_email']]['duration'] += r['duration']
+for name in zoom_participants.keys():
+    records = [r for r in participants_records if r['name'] == name]
+    # the participant joined multiple times, we need to combine them
+    if len(records) >= 1:
+        # Algorithm from https://medium.com/@saraswatp/solving-overlapping-intervals-with-python-the-merged-interval-problem-dcf16ad09190
+        # first, sort the records by join_time
+        records.sort(key=lambda x: to_iso8061(x['join_time']))
+        merged_records = []
+        for record in records:
+            # If the list of merged records is empty or if the current record does not overlap with the previous one,
+            # simply add it to the merged list
+            if not merged_records or to_iso8061(record['join_time']) > to_iso8061(merged_records[-1]['leave_time']):
+                merged_records.append(record)
+            else:
+                # If the current interval overlaps with previous one, merge them
+                merged_records[-1]['leave_time'] = max(to_iso8061(merged_records[-1]['leave_time']), to_iso8061(record['leave_time']))
+                merged_records[-1]['duration'] = (to_iso8061(merged_records[-1]['leave_time']) - to_iso8061(merged_records[-1]['join_time'])).total_seconds()
+
+        records = merged_records
+
+    # sum the duration of each records
+    zoom_participants[name]['duration'] = sum([r['duration'] for r in records])
+
 
 # retrieve the maximum duration
 mean_duration = mean([v['duration'] for k,v in zoom_participants.items()])
@@ -97,7 +119,7 @@ eb_event = None
 if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
 elif course:
-    eb_event = eb.get_event(course[0]['eventbrite_id'])
+    eb_event = eb.get_event(course['sessions'][0]['eventbrite_id'])
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
     todays_events = []
