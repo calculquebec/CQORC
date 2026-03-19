@@ -183,36 +183,42 @@ if __name__ == "__main__":
             start_date = min([to_iso8061(session['start_date']) for session in course['sessions']])
             end_date = max([to_iso8061(session['end_date']) for session in course['sessions']])
 
-            eventid = eb.create_event_from(
-                event_id=first_session['template'],
-                title=first_session['title'],
-                start_date=start_date,
-                end_date=end_date,
-                tz=config["global"]["timezone"],
-                summary=event_description["summary"] if event_description else "",
-            )
-            calendar.set_eventbrite_id(first_session['course_id'], eventid)
-            calendar.update_spreadsheet()
-            print(f"Successfully created {first_session['title']}({eventid}) {start_date} {end_date}")
+            if args.dry_run:
+                print(f"Dry-run: would create event '{first_session['title']}' from template {first_session['template']} ({start_date} -> {end_date})")
+            else:
+                eventid = eb.create_event_from(
+                    event_id=first_session['template'],
+                    title=first_session['title'],
+                    start_date=start_date,
+                    end_date=end_date,
+                    tz=config["global"]["timezone"],
+                    summary=event_description["summary"] if event_description else "",
+                )
+                calendar.set_eventbrite_id(first_session['course_id'], eventid)
+                calendar.update_spreadsheet()
+                print(f"Successfully created {first_session['title']}({eventid}) {start_date} {end_date}")
         else:
             eventid = first_session['eventbrite_id']
 
 
         # Update the event
-        if args.update or args.create:
-            if event_description:
-                # Update the description
-                eb.update_event_description(eventid, str(update_html(
-                    eb.get_event_description(eventid)['description'],
-                    event_description,
-                    instructor,
-                )))
-                print(f'Successfully updated {eventid} description')
+        if args.update:
+            if args.dry_run:
+                print(f"Dry-run: would update description and ticket classes for event {eventid}" f" for this course: {first_session['title']} " f"\nCurrent description: {eb.get_event_description(eventid)['description']}")
+            else:
+                if event_description:
+                    # Update the description
+                    eb.update_event_description(eventid, str(update_html(
+                        eb.get_event_description(eventid)['description'],
+                        event_description,
+                        instructor,
+                    )))
+                    print(f'Successfully updated {eventid} description')
 
-            # Update tickets classes
-            hours = int(config["eventbrite"]["close_hours_before_event"])
-            eb.update_tickets(eventid, "", (to_iso8061(first_session['start_date']) - timedelta(hours=hours)).astimezone(timezone.utc).strftime(UTC_FMT))
-            print(f'Successfully updated {eventid} ticket classes')
+                # Update tickets classes
+                hours = int(config["eventbrite"]["close_hours_before_event"])
+                eb.update_tickets(eventid, "", (to_iso8061(first_session['start_date']) - timedelta(hours=hours)).astimezone(timezone.utc).strftime(UTC_FMT))
+                print(f'Successfully updated {eventid} ticket classes')
 
             # Update Zoom webinar
             # Note: This merely creates a generic webinar, not a Zoom connection

@@ -3,6 +3,7 @@ import argparse, configparser, os, glob
 import urllib
 import yaml
 from git import Repo
+import re
 
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 UTC_FMT = '%Y-%m-%dT%H:%M:%SZ'
@@ -88,7 +89,9 @@ def get_trainer_keys(course_or_session, roles):
     return list(set(keys))
 
 def extract_course_code_from_title(config, title):
-    return eval('f' + repr(config['global']['course_code_template']))
+    if re.search(r'\[', title):
+        return eval('f' + repr(config['global']['course_code_template']))
+    return None
 
 def get_survey_link(config, locale, title, date):
     survey_template = config['survey'][f"survey_link_template_{locale}"]

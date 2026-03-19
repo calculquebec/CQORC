@@ -7,7 +7,6 @@ import interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
 from common import Trainers
 from statistics import mean
 
@@ -194,7 +193,7 @@ if not args.noslack:
 
     date = to_iso8061(eb_event['start']['local']).date()
     locale = eb_event['locale'].split('_')[0]
-    course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
+    course_code = course['sessions'][0]['code']
     channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
 
     if not slack.is_member(channel_name):

@@ -8,7 +8,6 @@ import CQORCcalendar
 import re
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
 from common import actualize_repo
 
 parser = argparse.ArgumentParser()
@@ -106,11 +105,13 @@ for session in sessions:
             title = eb_event['name']['text']
 
         if session['language'] == "FR":
-            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "online" or presence == "en ligne":
+            presence = re.search(r'\[\s*([^\],]+)', session['title'])
+            if presence and presence.group(1) in ("online", "en ligne"):
                 presence = "online"
+            elif presence:
+                presence = "onsite"
             else:
-                presence = "onsite"        
+                presence = "online"
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -126,11 +127,13 @@ Registration URL: {registration_url}
 
 """
         else:
-            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "online" or presence == "en ligne":
+            _presence_match = re.search(r'\[\s*([^\],]+)', session['title'])
+            if _presence_match and _presence_match.group(1) in ("online", "en ligne"):
                 presence = "online"
-            else:
+            elif _presence_match:
                 presence = "onsite"
+            else:
+                presence = "online"
             description = f"""Registration: {registration_url}
 
 {summary}
