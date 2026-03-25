@@ -257,7 +257,7 @@ class SlackInterface:
 
 
     def get_channel_bookmark_link(self, channel_name, bookmark_title):
-        for bookmark in self.list_channel_bookmarks(channel_name):
+        for bookmark in (self.list_channel_bookmarks(channel_name) or []):
             if bookmark['title'] == bookmark_title:
                 return bookmark['link']
         return None

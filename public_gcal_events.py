@@ -154,8 +154,10 @@ Registration URL: {registration_url}
                 print(f"Calendar ID found: {session['public_gcal_id']}, not creating a new event")
             else:
                 event = gcal.create_event(start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+                print(f'Successfully created event {event["id"]} for {title}')
                 calendar.set_gcal_id(session['course_id'], session['start_date'], event['id'], "public_gcal_id")
                 calendar.update_spreadsheet()
+                print(f"Google spreadsheet created a google calendar id for session {session['course_id']} - {title}")
 
         elif args.update:
             if session['public_gcal_id']:
@@ -172,6 +174,8 @@ Registration URL: {registration_url}
                 print(f"Dry-run: would run {cmd}")
             else:
                 gcal.update_event(event_id, start_time.isoformat(), end_time.isoformat(), title, description, attendees, send_updates=send_updates)
+                print(f"Successfully updated event {event_id} for {title}")
+        
         elif args.delete:
             if session['public_gcal_id']:
                 event_id = session['public_gcal_id']
@@ -184,13 +188,13 @@ Registration URL: {registration_url}
                 event_id = existing_events[0]['id']
 
             if args.dry_run:
-                cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
-                print(f"Dry-run: would run {cmd}")
+                print(f"Dry-run: would delete event {event_id} ({title}), send_updates={send_updates}")
             else:
                 gcal.delete_event(event_id, send_updates=send_updates)
+                print(f"Successfully deleted event {event_id} for {title}")
                 calendar.set_gcal_id(session['course_id'], session['start_date'], '', "public_gcal_id")
                 calendar.update_spreadsheet()
-
+                print(f"Google spreadsheet deleted google calendar id for session {session['course_id']} - {title}")
     except Exception as e:
         print(f"Error encountered when processing session {session}: {e}")
 

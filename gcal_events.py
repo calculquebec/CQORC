@@ -115,8 +115,10 @@ for session in sessions:
                         print(f"Dry-run: would run {cmd}")
                     else:
                         event = gcal.create_event(event_type['start_time'].isoformat(), event_type['end_time'].isoformat(), event_type['title'], event_type['description'], attendees, send_updates=send_updates)                            
+                        print(f'Successfully created event {event["id"]} for {event_type["title"]}')
                         calendar.set_gcal_id(session['course_id'], session['start_date'], event['id'], event_type['session_id'])
                         calendar.update_spreadsheet()
+                        print(f"Google spreadsheet copied google calendar id for session {session['course_id']} - {event_type['title']}")                        
 
         elif args.update:
             if not latest_session:
@@ -141,6 +143,7 @@ for session in sessions:
                 else:
                     if event_id:
                         gcal.update_event(event_id, event_type['start_time'].isoformat(), event_type['end_time'].isoformat(), event_type['title'], event_type['description'], attendees, send_updates=send_updates)
+                        print(f"Successfully updated event {event_id} for {event_type['title']}")
 
         elif args.delete:
             if not latest_session:
@@ -159,14 +162,15 @@ for session in sessions:
 
                 if args.dry_run:
                     if not event_id:
-                        print("Please note that this Google Canlendar event has not been created.")
-                    cmd = f"gcal.delete_event({event_id}, send_updates={send_updates})"
-                    print(f"Dry-run: would run {cmd}")
+                        print("Please note that this Google Calendar event has not been created.")
+                    print(f"Dry-run: would delete event {event_id} ({event_type['title']}), send_updates={send_updates}")
                 else:
                     if event_id:
                         gcal.delete_event(event_id, send_updates=send_updates)
+                        print(f"Successfully deleted event {event_id} for {event_type['title']}")
                         calendar.set_gcal_id(session['course_id'], session['start_date'], '', event_type['session_id'])
                         calendar.update_spreadsheet()
+                        print(f"Google spreadsheet deleted google calendar id for session {session['course_id']} - {event_type['title']}")
 
     except Exception as error:
         print(f"Error encountered when processing session {session}: %s" % error)
