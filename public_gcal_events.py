@@ -104,14 +104,22 @@ for session in sessions:
         if eb_event:
             title = eb_event['name']['text']
 
-        if session['language'] == "FR":
-            presence = re.search(r'\[\s*([^\],]+)', session['title'])
-            if presence and presence.group(1) in ("online", "en ligne"):
+        # Determine presence from title bracket:
+        # [online, CODE] or [en ligne, CODE] → online
+        # [Séance d'information] (text only, no comma) → online
+        # no bracket → online
+        # [U.Sherbrooke, CODE] or any other location → onsite
+        bracket_match = re.search(r'\[([^\]]+)\]', session['title'])
+        if bracket_match:
+            parts = [p.strip() for p in bracket_match.group(1).split(',')]
+            if parts[0] in ("online", "en ligne") or len(parts) == 1:
                 presence = "online"
-            elif presence:
-                presence = "onsite"
             else:
-                presence = "online"
+                presence = "onsite"
+        else:
+            presence = "online"
+
+        if session['language'] == "FR":
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -127,13 +135,6 @@ Registration URL: {registration_url}
 
 """
         else:
-            _presence_match = re.search(r'\[\s*([^\],]+)', session['title'])
-            if _presence_match and _presence_match.group(1) in ("online", "en ligne"):
-                presence = "online"
-            elif _presence_match:
-                presence = "onsite"
-            else:
-                presence = "online"
             description = f"""Registration: {registration_url}
 
 {summary}
