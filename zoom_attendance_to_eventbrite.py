@@ -47,7 +47,7 @@ webinars = []
 if args.zoom_id:
     webinars = zoom.get_webinars(ids = [int(args.zoom_id)])
 elif course:
-    webinars = zoom.get_webinar(ids = [int(course[0]['zoom_id'])])
+    webinars = [zoom.get_webinar(int(course['sessions'][0]['zoom_id']))]
 elif args.date:
     webinars = zoom.get_webinars(date = to_iso8061(args.date).date())
 
@@ -97,7 +97,7 @@ eb_event = None
 if args.eventbrite_id:
     eb_event = eb.get_event(args.eventbrite_id)
 elif course:
-    eb_event = eb.get_event(course[0]['eventbrite_id'])
+    eb_event = eb.get_event(course['sessions'][0]['eventbrite_id'])
 else:
     eb_events = eb.get_events(global_config['eventbrite']['organization_id'], time_filter="past", flattened=True, order_by="start_desc")
     todays_events = []
