@@ -73,6 +73,16 @@ for course in courses:
         course_code = first_session['code']
         locale = first_session['language']
         title = first_session['title']
+        start_hour = to_iso8061(first_session['start_date']).hour
+        end_hour = to_iso8061(first_session['end_date']).hour
+        if 9 <= start_hour and end_hour <= 12:
+            time = 'am'
+        elif 12 <= start_hour and end_hour <= 13:
+            time = 'noon'
+        elif 13 <= start_hour and end_hour <= 16:
+            time = 'pm'
+        else:
+            time = ''
 
         survey_link = get_survey_link(config, locale, title, date)
 
