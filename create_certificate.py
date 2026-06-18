@@ -400,6 +400,7 @@ if __name__ == '__main__':
     parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee", action="store_true")
     parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
     parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
+    parser.add_argument('--dry-run', default=False, action='store_true', help="Dry-run: print actions without executing them")
     args = parser.parse_args()
 
 
@@ -423,15 +424,25 @@ if __name__ == '__main__':
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
 
     # Write the certificates:
-    write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+    if args.dry_run:
+        print(f"Dry-run: would generate {len(attended_guest)} certificate(s) in '{args.certificate_dir}'")
+        for guest in attended_guest:
+            print(f"  {guest['first_name']} {guest['last_name']} -> {guest['filename']}")
+    else:
+        write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
-    # Get email config, in email.cfg:
-
-    gmail_user = global_config['email']['user']
-    gmail_password = global_config['email']['password']
-    
+    # Get email config, in email.cfg (command-line args take precedence):
+    gmail_user = args.gmail_user or global_config['email']['user']
+    gmail_password = args.gmail_password or global_config['email']['password']
 
     # Create email:
     if args.send_atnd or args.send_self:
-        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
+        if args.dry_run:
+            if args.send_self:
+                target = args.self_email or gmail_user
+                print(f"Dry-run: would send {len(attended_guest)} email(s) to {target}")
+            else:
+                print(f"Dry-run: would send an email to each of {len(attended_guest)} attendee(s)")
+        else:
+            send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
 

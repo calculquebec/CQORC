@@ -68,37 +68,58 @@ for course in courses:
         if args.create:
             if first_session['zoom_id']:
                 print(f"Zoom ID already exists for this session {first_session['zoom_id']}, not creating")
+            elif args.dry_run:
+                print(f"Dry-run: would create webinar for course {first_session['course_id']} - {title} on {start_time} (duration: {int(duration)} min)")
             else:
                 webinar = zoom.create_webinar(first_session['title'], duration, start_time.date(), start_time.time())
+                print(f"Webinar created with id {webinar['id']} for course {first_session['course_id']} - {title}")
                 if webinar and 'id' in webinar:
                     calendar.set_zoom_id(first_session['course_id'], webinar['id'])
+                    print(f"Zoom id createdfor session {first_session['course_id']} - {title}")
                     calendar.update_spreadsheet()
+                    print(f"Google spreadsheet updated with zoom id for session {first_session['course_id']} - {title}")
 
         if first_session['zoom_id']:
             webinar = zoom.get_webinar(first_session['zoom_id'])
+        elif args.dry_run and args.create:
+            webinar = {'id': '<new_webinar_id>'}
         else:
             print(f"No webinar found. Please create it first with the --create option")
             exit(1)
 
         if args.delete:
-            print(f"Deleting webinar {webinar['id']}")
-            zoom.delete_webinar(webinar['id'])
-            calendar.set_zoom_id(first_session['course_id'], '')
-            calendar.update_spreadsheet()
+            if args.dry_run:
+                print(f"Dry-run: would delete webinar {webinar['id']} for course {first_session['course_id']} - {title}")
+            else:
+                print(f"Deleting webinar {webinar['id']}")
+                zoom.delete_webinar(webinar['id'])
+                print(f"Webinar {webinar['id']} deleted")
+                calendar.set_zoom_id(first_session['course_id'], '')
+                print(f"Zoom id deleted for session {first_session['course_id']} - {title}")
+                calendar.update_spreadsheet()
+                print(f"Google spreadsheet updated with zoom id deletion for session {first_session['course_id']} - {title}")
 
         if args.update_panelists or args.update:
             attendee_keys = get_trainer_keys(course, ['assistants', 'instructor', 'host'])
             panelists = zoom.get_panelists(webinar['id'])
             for key in attendee_keys:
                 if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
-                    zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
+                    if args.dry_run:
+                        print(f"Dry-run: would add panelist {trainers.fullname(key)} ({trainers.zoom_email(key)}) to webinar {webinar['id']}")
+                    else:
+                        zoom.add_panelist(webinar['id'], trainers.zoom_email(key), trainers.fullname(key))
+                        print(f"Added panelist {trainers.fullname(key)} ({trainers.zoom_email(key)}) to webinar {webinar['id']}")
 
         if args.update_hosts or args.update:
             params = {}
             settings = {}
             settings['alternative_hosts'] = ','.join([trainers.zoom_email(k) for k in get_trainer_keys(course, ['host'])])
             params['settings'] = settings
-            zoom.update_webinar(webinar['id'], params)
+            if args.dry_run:
+                print(f"Dry-run: would update hosts for webinar {webinar['id']} to {settings['alternative_hosts']}")
+            else:
+                zoom.update_webinar(webinar['id'], params)
+                print(f"Updated hosts for webinar {webinar['id']} to {settings['alternative_hosts']}")
 
         if args.update_settings or args.update:
             params = {}
@@ -118,7 +139,11 @@ for course in courses:
             pp = pprint.PrettyPrinter(indent=4)
             print("Params:")
             pp.pprint(params)
-            zoom.update_webinar(webinar['id'], params)
+            if args.dry_run:
+                print(f"Dry-run: would update settings for webinar {webinar['id']}")
+            else:
+                zoom.update_webinar(webinar['id'], params)
+                print(f"Updated settings for webinar {webinar['id']}")
 
         if args.list_panelists:
             panelists = zoom.get_panelists(webinar['id'])
@@ -134,6 +159,7 @@ for course in courses:
 #    except Exception as e:
 #        print(f"Error encountered when processing event {event}: \n\n{e}")
 
-calendar.update_spreadsheet()
+if not args.dry_run:
+    calendar.update_spreadsheet()
 
 
