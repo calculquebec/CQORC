@@ -8,8 +8,7 @@ import interfaces.google.GSheetsInterface as GSheetsInterface
 import interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--course_id", default=None, help="Manage only for this course id")
@@ -84,8 +83,8 @@ if not course:
 attendees = eb.get_event_attendees_registered(eventbrite_id, fields = ['email', 'name'])
 
 date = to_iso8061(event["start"]["local"]).date()
-title = event["name"]["text"]
-locale = event["locale"].split('_')[0]
+title = get_title(course['sessions'][0])
+locale = course['sessions'][0]['language']
 
 if args.course_code:
     course_code = args.course_code

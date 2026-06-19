@@ -87,9 +87,6 @@ def get_trainer_keys(course_or_session, roles):
 
     return list(set(keys))
 
-def extract_course_code_from_title(config, title):
-    return eval('f' + repr(config['global']['course_code_template']))
-
 def get_survey_link(config, locale, title, date):
     survey_template = config['survey'][f"survey_link_template_{locale}"]
     link = eval('f' + repr(survey_template))
@@ -106,6 +103,26 @@ def actualize_repo(url, local_repo):
     )
     # pull in latest changes if any, expects remote to be named `origin`
     repo.remotes.origin.pull()
+
+def get_title(course_or_session):
+    """
+    Build the event title based on course code and mode.
+
+    - MIDI* courses: title as-is
+    - on site: "{title} [{site}, {code}]"
+    - other (online, en ligne, etc.): "{title} [{mode}, {code}]"
+    """
+    base_title = course_or_session['title']
+    code = course_or_session['code']
+    mode = course_or_session['mode']
+    site = course_or_session['site']
+
+    if code.startswith('MIDI'):
+        return base_title
+    elif mode == 'on site':
+        return f"{base_title} [{site}, {code}]"
+    else:
+        return f"{base_title} [{mode}, {code}]"
 
 class Trainers:
     def __init__(self, file_name):

@@ -5,8 +5,7 @@ import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 from common import get_survey_link
 from common import get_trainer_keys
 from common import Trainers
@@ -72,17 +71,8 @@ for course in courses:
         date = to_iso8061(first_session['start_date']).date()
         course_code = first_session['code']
         locale = first_session['language']
-        title = first_session['title']
-        start_hour = to_iso8061(first_session['start_date']).hour
-        end_hour = to_iso8061(first_session['end_date']).hour
-        if 9 <= start_hour and end_hour <= 12:
-            time = 'am'
-        elif 12 <= start_hour and end_hour <= 13:
-            time = 'noon'
-        elif 13 <= start_hour and end_hour <= 16:
-            time = 'pm'
-        else:
-            time = ''
+        title = get_title(first_session)
+        site = first_session['site'].replace('.', '')
 
         survey_link = get_survey_link(config, locale, title, date)
 

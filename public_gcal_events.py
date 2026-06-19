@@ -7,8 +7,7 @@ import yaml
 import CQORCcalendar
 import re
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 from common import actualize_repo
 
 parser = argparse.ArgumentParser()
@@ -87,7 +86,7 @@ for session in sessions:
 
         attendees = None
         if event_description:
-            title = event_description['title']
+            title = get_title(session)
             summary = f"""{event_description['summary']}
 
 {event_description['description']}"""
@@ -97,7 +96,7 @@ for session in sessions:
                 # we flatten the 2d list
                 plan = "\n* ".join([''] + list(itertools.chain.from_iterable(event_description['plan'])))
         else:
-            title = session['title']
+            title = get_title(session)
             plan = "-"
             summary = "-"
 
@@ -105,12 +104,8 @@ for session in sessions:
         if eb_event:
             title = eb_event['name']['text']
 
-        if session['language'] == "FR":
-            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "online" or presence == "en ligne":
-                presence = "online"
-            else:
-                presence = "onsite"        
+        if session['language'] == "fr":
+            presence = "en ligne" if session['mode'] in ("online", "en ligne") else "onsite"        
             description = f"""Inscriptions: {registration_url}
 
 {summary}
@@ -126,11 +121,7 @@ Registration URL: {registration_url}
 
 """
         else:
-            presence = re.search(r'\[\s*([^\],]+)', session['title']).group(1)
-            if presence == "online" or presence == "en ligne":
-                presence = "online"
-            else:
-                presence = "onsite"
+            presence = "online" if session['mode'] in ("online", "en ligne") else "onsite"
             description = f"""Registration: {registration_url}
 
 {summary}

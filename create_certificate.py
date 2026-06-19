@@ -19,7 +19,7 @@ from email.mime.multipart import MIMEMultipart
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import CQORCcalendar
 
-from common import get_config
+from common import get_config, get_title
 
 ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 
@@ -412,7 +412,12 @@ if __name__ == '__main__':
 
     # Resolve course_id to EventBrite event id via the calendar:
     calendar = CQORCcalendar.Calendar(global_config, args)
-    eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
+    first_session = calendar[args.course_id]['sessions'][0]
+    eventbrite_id = first_session['eventbrite_id']
+
+    # Build title from calendar session if not provided on command line:
+    if not args.title:
+        args.title = get_title(first_session)
 
     # Get event information:
     eb_event = eb.get_event(eventbrite_id)

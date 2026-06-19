@@ -6,8 +6,7 @@ import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import get_title, valid_date, to_iso8061, ISO_8061_FORMAT, get_config
 from common import Trainers
 from statistics import mean
 
@@ -192,9 +191,12 @@ print(message)
 if not args.noslack:
     slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
 
-    date = to_iso8061(eb_event['start']['local']).date()
-    locale = eb_event['locale'].split('_')[0]
-    course_code = extract_course_code_from_title(global_config, eb_event["name"]["text"])
+    first_session = course['sessions'][0]
+    date = to_iso8061(first_session['start_date']).date()
+    course_code = first_session['code']
+    locale = first_session['language']
+    site = first_session['site'].replace('.', '')
+    title = get_title(first_session)
     channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
 
     if not slack.is_member(channel_name):
