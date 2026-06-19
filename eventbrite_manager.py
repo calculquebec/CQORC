@@ -186,7 +186,6 @@ if __name__ == "__main__":
             # Build title based on course code and mode
             title = get_title(first_session)
 
-<<<<<<< Updated upstream
             if args.dry_run:
                 print(f"Dry-run: would create {title} {start_date} {end_date}")
                 eventid = "<new_event_id>"
@@ -202,19 +201,6 @@ if __name__ == "__main__":
                 calendar.set_eventbrite_id(first_session['course_id'], eventid)
                 calendar.update_spreadsheet()
                 print(f"Successfully created {title}({eventid}) {start_date} {end_date}")
-=======
-            eventid = eb.create_event_from(
-                event_id=first_session['template'],
-                title=title,
-                start_date=start_date,
-                end_date=end_date,
-                tz=config["global"]["timezone"],
-                summary=event_description["summary"] if event_description else "",
-            )
-            calendar.set_eventbrite_id(first_session['course_id'], eventid)
-            calendar.update_spreadsheet()
-            print(f"Successfully created {title}({eventid}) {start_date} {end_date}")
->>>>>>> Stashed changes
         else:
             eventid = first_session['eventbrite_id']
 
