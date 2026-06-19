@@ -6,6 +6,7 @@ import interfaces.zoom.ZoomInterface as ZoomInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 from common import get_trainer_keys
 from common import Trainers
 from common import get_survey_link
@@ -57,6 +58,7 @@ for course in courses:
         date = to_iso8061(first_session['start_date']).date()
         course_code = first_session['code']
         locale = first_session['language']
+        title = get_title(first_session)
         title = get_title(first_session)
 
         # for multi-session courses, the duration of the webinar must be from the start to the end
