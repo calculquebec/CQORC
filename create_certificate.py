@@ -4,10 +4,12 @@ import argparse
 import cairosvg
 import unidecode
 import os
+import re
 import jinja2
 import yaml
 import getpass
 import smtplib
+import sys
 
 from datetime import datetime
 from email import encoders
@@ -17,7 +19,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
+import interfaces.google.GDriveInterface as GDriveInterface
 import CQORCcalendar
+from googleapiclient.http import MediaFileUpload
 
 from common import get_config
 
@@ -373,6 +377,67 @@ def send_email(event, guests, email_tplt_dir, send_self, number_to_send, languag
                 nsent = nsent + 1
                 if nsent == number_to_send:
                     break
+
+def upload_certificates_to_gdrive(certificate_dir, gdrive, global_config, dry_run=False, file_paths=None):
+    """Upload certificates to the configured Google Drive folder.
+
+    If file_paths is provided, only those files are uploaded.
+    Otherwise, all PDF files found in certificate_dir are uploaded.
+    """
+
+    google_drive_url = global_config['google.drive']['google_drive_url']
+    folder_id_match = re.search(r'/folders/([a-zA-Z0-9_-]+)', google_drive_url)
+    folder_id = folder_id_match.group(1) if folder_id_match else google_drive_url
+
+    if file_paths is not None:
+        files_to_upload = [
+            file_path
+            for file_path in file_paths
+            if os.path.isfile(file_path) and file_path.lower().endswith('.pdf')
+        ]
+    else:
+        if not os.path.isdir(certificate_dir):
+            print(f"Certificate directory does not exist: {certificate_dir}")
+            return
+
+        files_to_upload = [
+            os.path.join(certificate_dir, file_name)
+            for file_name in os.listdir(certificate_dir)
+            if os.path.isfile(os.path.join(certificate_dir, file_name)) and file_name.lower().endswith('.pdf')
+        ]
+
+    if not files_to_upload:
+        print(f"No PDF files found in {certificate_dir}.")
+        return
+
+    if dry_run:
+        print(f"Dry-run: would upload {len(files_to_upload)} PDF file(s) to Google Drive folder {google_drive_url}")
+        for file_path in files_to_upload:
+            print(f"  {os.path.basename(file_path)}")
+        return
+
+    print(f"--- Uploading PDFs to Google Drive folder {google_drive_url} ---")
+    uploaded = 0
+    for file_path in files_to_upload:
+        file_name = os.path.basename(file_path)
+        media = MediaFileUpload(file_path, mimetype='application/pdf', resumable=False)
+        drive_file = (
+            gdrive.get_service()
+            .files()
+            .create(
+                body={'name': file_name},
+                media_body=media,
+                fields='id',
+                supportsAllDrives=True,
+            )
+            .execute()
+        )
+
+        gdrive.move_file_to_folder(drive_file['id'], folder_id)
+        uploaded += 1
+        print(f"Uploaded: {file_name}")
+
+    print(f"Upload complete: {uploaded} file(s) transferred to Google Drive.")
     
 
 if __name__ == '__main__':
@@ -391,6 +456,7 @@ if __name__ == '__main__':
     parser.add_argument("--order_id", default=None, help="Attendee order identification number")
     parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
     parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
+    parser.add_argument("--upload", default=False, action="store_true", help="Upload certificates to a Google Drive folder")
     parser.add_argument("--course_id", help="Course ID from the calendar spreadsheet", required=True)
     parser.add_argument("--certificate_svg_tplt_dir",default="./secrets/Attestation_template", help="Directory that holds certificate templates.")
     parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
@@ -414,6 +480,12 @@ if __name__ == '__main__':
     calendar = CQORCcalendar.Calendar(global_config, args)
     eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
 
+    # Google drive interface:
+    credentials_file = global_config['google']['credentials_file']
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
+    credentials_file_path = os.path.join(secrets_dir, credentials_file)
+    gdrive = GDriveInterface.GDriveInterface(credentials_file_path)
+
     # Get event information:
     eb_event = eb.get_event(eventbrite_id)
 
@@ -422,6 +494,7 @@ if __name__ == '__main__':
 
     # Generate a registration list:
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
+    generated_certificate_files = [guest['filename'] for guest in attended_guest]
 
     # Write the certificates:
     if args.dry_run:
@@ -430,6 +503,9 @@ if __name__ == '__main__':
             print(f"  {guest['first_name']} {guest['last_name']} -> {guest['filename']}")
     else:
         write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+
+    if args.upload:
+        upload_certificates_to_gdrive(args.certificate_dir, gdrive, global_config, dry_run=args.dry_run, file_paths=generated_certificate_files)
 
     # Get email config, in email.cfg (command-line args take precedence):
     gmail_user = args.gmail_user or global_config['email']['user']
