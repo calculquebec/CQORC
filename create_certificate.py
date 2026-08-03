@@ -108,6 +108,23 @@ def safe_filename(filename):
 
     return filename.upper()
 
+MONTHS_FR = [
+    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
+    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
+]
+MONTHS_EN = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+]
+
+def format_date(date_str, language):
+    """Format a YYYY-MM-DD date string according to language."""
+    dt = datetime.strptime(date_str, "%Y-%m-%d")
+    if language == 'fr':
+        return f"{dt.day} {MONTHS_FR[dt.month - 1]} {dt.year}"
+    else:
+        return f"{MONTHS_EN[dt.month - 1]} {dt.day}, {dt.year}"
+
 def safe_name(name):
     rules = {"&" : " and ",
              "\\": "/"    }
@@ -115,7 +132,7 @@ def safe_name(name):
     for old, new in rules.items():
         name = name.replace(old, new)
 
-    return name.upper()
+    return name.title()
 
 def build_registrant_list(event, guests, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
     """
@@ -171,15 +188,18 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     # Complete duration with the right term for time spelling:
     if language == "en":
         if float(duration) <= 1.0:
-            duration = str(duration) + " hour."
+            duration = str(duration) + " hour"
         else:
-            duration = str(duration) + " hours."
+            duration = str(duration) + " hours"
 
     elif language == "fr":
         if float(duration) <= 1.0:
-            duration = str(duration) + " heure."
+            duration = str(duration) + " heure"
         else:
-            duration = str(duration) + " heures."
+            duration = str(duration) + " heures"
+
+    # Format date according to language:
+    date = format_date(date, language)
 
     filename_template = os.path.join(certificate_dir,  ATTESTATION_CQ_TEMPLATE)
 
