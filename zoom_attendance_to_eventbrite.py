@@ -195,7 +195,7 @@ if not args.noslack:
     date = to_iso8061(first_session['start_date']).date()
     course_code = first_session['code']
     locale = first_session['language']
-    site = first_session['site'].replace('.', '')
+    site = first_session['site'].replace('.', '').replace(' ', '')
     title = get_title(first_session)
     channel_name = eval('f' + repr(global_config['global']['slack_channel_template']))
 

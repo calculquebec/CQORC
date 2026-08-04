@@ -72,7 +72,7 @@ for course in courses:
         course_code = first_session['code']
         locale = first_session['language']
         title = get_title(first_session)
-        site = first_session['site'].replace('.', '')
+        site = first_session['site'].replace('.', '').replace(' ', '')
 
         survey_link = get_survey_link(config, locale, title, date)
 

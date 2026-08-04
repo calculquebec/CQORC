@@ -106,23 +106,19 @@ def actualize_repo(url, local_repo):
 
 def get_title(course_or_session):
     """
-    Build the event title based on course code and mode.
+    Build the event title based on course code and site.
 
     - MIDI* courses: title as-is
-    - on site: "{title} [{site}, {code}]"
-    - other (online, en ligne, etc.): "{title} [{mode}, {code}]"
+    - other: "{title} [{site}, {code}]"
+      where site contains 'en ligne', 'online', or a venue name (e.g. 'U.Sherbrooke')
     """
     base_title = course_or_session['title']
     code = course_or_session['code']
-    mode = course_or_session['mode']
     site = course_or_session['site']
 
     if code.startswith('MIDI'):
         return base_title
-    elif mode == 'on site':
-        return f"{base_title} [{site}, {code}]"
-    else:
-        return f"{base_title} [{mode}, {code}]"
+    return f"{base_title} [{site}, {code}]"
 
 class Trainers:
     def __init__(self, file_name):
