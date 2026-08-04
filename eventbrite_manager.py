@@ -9,7 +9,7 @@ import configparser
 from glob import glob
 #import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.eventbrite.EventbriteInterface as eventbrite
-from common import UTC_FMT, valid_date, to_iso8061, ISO_8061_FORMAT, Trainers, get_config
+from common import UTC_FMT, valid_date, to_iso8061, ISO_8061_FORMAT, Trainers, get_config, get_title
 from common import get_trainer_keys
 import CQORCcalendar
 
@@ -183,13 +183,16 @@ if __name__ == "__main__":
             start_date = min([to_iso8061(session['start_date']) for session in course['sessions']])
             end_date = max([to_iso8061(session['end_date']) for session in course['sessions']])
 
+            # Build title based on course code and mode
+            title = get_title(first_session)
+
             if args.dry_run:
-                print(f"Dry-run: would create {first_session['title']} {start_date} {end_date}")
+                print(f"Dry-run: would create {title} {start_date} {end_date}")
                 eventid = "<new_event_id>"
             else:
                 eventid = eb.create_event_from(
                     event_id=first_session['template'],
-                    title=first_session['title'],
+                    title=title,
                     start_date=start_date,
                     end_date=end_date,
                     tz=config["global"]["timezone"],
@@ -197,7 +200,7 @@ if __name__ == "__main__":
                 )
                 calendar.set_eventbrite_id(first_session['course_id'], eventid)
                 calendar.update_spreadsheet()
-                print(f"Successfully created {first_session['title']}({eventid}) {start_date} {end_date}")
+                print(f"Successfully created {title}({eventid}) {start_date} {end_date}")
         else:
             eventid = first_session['eventbrite_id']
 
@@ -230,7 +233,7 @@ if __name__ == "__main__":
         # Delete the event
         if args.delete:
             if args.dry_run:
-                cmd = f"eb.delete_event {eventid}, calendar.set_eventbrite_id({first_session['course_id']}, {''}), for this course: {first_session['title']} "
+                cmd = f"eb.delete_event {eventid}, calendar.set_eventbrite_id({first_session['course_id']}, {''}), for this course: {get_title(first_session)} "
                 print(f"Dry-run: would run {cmd}")
             else:
                 eb.delete_event(eventid)

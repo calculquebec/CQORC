@@ -412,13 +412,16 @@ if __name__ == '__main__':
 
     # Resolve course_id to EventBrite event id via the calendar:
     calendar = CQORCcalendar.Calendar(global_config, args)
-    eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
+    first_session = calendar[args.course_id]['sessions'][0]
+    eventbrite_id = first_session['eventbrite_id']
 
     # Get event information:
     eb_event = eb.get_event(eventbrite_id)
 
     # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
+
+    title = args.title or first_session.get('title')
 
     # Generate a registration list:
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)

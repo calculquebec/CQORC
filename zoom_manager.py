@@ -5,8 +5,8 @@ import pprint
 import interfaces.zoom.ZoomInterface as ZoomInterface
 import CQORCcalendar
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 from common import get_trainer_keys
 from common import Trainers
 from common import get_survey_link
@@ -58,7 +58,8 @@ for course in courses:
         date = to_iso8061(first_session['start_date']).date()
         course_code = first_session['code']
         locale = first_session['language']
-        title = first_session['title']
+        title = get_title(first_session)
+        title = get_title(first_session)
 
         # for multi-session courses, the duration of the webinar must be from the start to the end
         start_time = min([to_iso8061(session['start_date']) for session in course['sessions']])
@@ -71,7 +72,7 @@ for course in courses:
             elif args.dry_run:
                 print(f"Dry-run: would create webinar for course {first_session['course_id']} - {title} on {start_time} (duration: {int(duration)} min)")
             else:
-                webinar = zoom.create_webinar(first_session['title'], duration, start_time.date(), start_time.time())
+                webinar = zoom.create_webinar(title, duration, start_time.date(), start_time.time())
                 print(f"Webinar created with id {webinar['id']} for course {first_session['course_id']} - {title}")
                 if webinar and 'id' in webinar:
                     calendar.set_zoom_id(first_session['course_id'], webinar['id'])
@@ -79,10 +80,12 @@ for course in courses:
                     calendar.update_spreadsheet()
                     print(f"Google spreadsheet updated with zoom id for session {first_session['course_id']} - {title}")
 
+        is_placeholder_webinar = False
         if first_session['zoom_id']:
             webinar = zoom.get_webinar(first_session['zoom_id'])
         elif args.dry_run and args.create:
             webinar = {'id': '<new_webinar_id>'}
+            is_placeholder_webinar = True
         else:
             print(f"No webinar found. Please create it first with the --create option")
             exit(1)
@@ -101,7 +104,9 @@ for course in courses:
 
         if args.update_panelists or args.update:
             attendee_keys = get_trainer_keys(course, ['assistants', 'instructor', 'host'])
-            panelists = zoom.get_panelists(webinar['id'])
+            panelists = []
+            if not is_placeholder_webinar:
+                panelists = zoom.get_panelists(webinar['id'])
             for key in attendee_keys:
                 if trainers.zoom_email(key) not in [x['email'] for x in panelists]:
                     if args.dry_run:
