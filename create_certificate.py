@@ -8,6 +8,7 @@ import jinja2
 import yaml
 import getpass
 import smtplib
+import sys
 
 from datetime import datetime
 from email import encoders
@@ -118,7 +119,7 @@ MONTHS_EN = [
 ]
 
 def format_date(date_str, language):
-    """Format a YYYY-MM-DD date string according to language."""
+    """Convert YYYY-MM-DD into a localized date string with month name (e.g., '4 aout 2026' or 'August 4, 2026')."""
     dt = datetime.strptime(date_str, "%Y-%m-%d")
     if language == 'fr':
         return f"{dt.day} {MONTHS_FR[dt.month - 1]} {dt.year}"
@@ -134,7 +135,7 @@ def safe_name(name):
 
     return name.title()
 
-def build_registrant_list(event, guests, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
+def build_registrant_list(event, guests, code, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
     """
     Generate a registration list.    
 
@@ -146,6 +147,9 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     guests : dict
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
         get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
+
+    code : str
+        Event code
 
     title : str
         Event title
@@ -166,9 +170,12 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     Returns - Python dictionary with formatted attendees information
     """
   
-    # Set title:
+    # Set title: always normalize as "code - title" when code is available.
+    title = (title or '').strip()
     if not title:
         title = event['name']['text'].strip()
+    if code and not title.startswith(f"{code} - "):
+        title = f"{code} - {title}"
 
     # Set duration:
     if not duration:
@@ -432,7 +439,9 @@ if __name__ == '__main__':
 
     # Resolve course_id to EventBrite event id via the calendar:
     calendar = CQORCcalendar.Calendar(global_config, args)
-    eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
+    first_session = calendar[args.course_id]['sessions'][0]
+    eventbrite_id = first_session['eventbrite_id']
+    code = first_session['code']
 
     # Get event information:
     eb_event = eb.get_event(eventbrite_id)
@@ -440,8 +449,24 @@ if __name__ == '__main__':
     # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
+    title = args.title or first_session.get('title')
+
     # Generate a registration list:
-    attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
+    attended_guest = build_registrant_list(
+        eb_event,
+        eb_attendees,
+        code,
+        args.personnalized_certificate,
+        title,
+        args.duration,
+        args.date,
+        args.language,
+        args.first_name,
+        args.last_name,
+        args.order_id,
+        args.email_attendee,
+        args.certificate_dir
+    )
 
     # Write the certificates:
     if args.dry_run:
