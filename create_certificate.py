@@ -9,6 +9,7 @@ import yaml
 import getpass
 import smtplib
 import sys
+import locale
 
 from datetime import datetime
 from email import encoders
@@ -109,22 +110,15 @@ def safe_filename(filename):
 
     return filename.upper()
 
-MONTHS_FR = [
-    'janvier', 'février', 'mars', 'avril', 'mai', 'juin',
-    'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'
-]
-MONTHS_EN = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-]
+DATE_FORMAT = {
+    'fr': '%e %B %Y',
+    'en': '%B %e %Y',
+}
 
 def format_date(date_str, language):
-    """Convert YYYY-MM-DD into a localized date string with month name (e.g., '4 aout 2026' or 'August 4, 2026')."""
-    dt = datetime.strptime(date_str, "%Y-%m-%d")
-    if language == 'fr':
-        return f"{dt.day} {MONTHS_FR[dt.month - 1]} {dt.year}"
-    else:
-        return f"{MONTHS_EN[dt.month - 1]} {dt.day}, {dt.year}"
+    """Convert YYYY-MM-DD into a localized date string with month name (e.g., '4 août 2026' or 'August 4, 2026')."""
+    locale.setlocale(locale.LC_ALL, f"{language}_CA")
+    return datetime.strptime(date_str, "%Y-%m-%d").strftime(DATE_FORMAT[language]).strip()
 
 def safe_name(name):
     rules = {"&" : " and ",
