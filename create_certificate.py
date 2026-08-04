@@ -17,9 +17,9 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
+import CQORCcalendar
 
 from common import get_config
-from common import to_iso8061
 
 ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 
@@ -27,7 +27,7 @@ ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 """
 Usage:
 
-python3 create_certificate.py --event_id 778466443087
+python3 create_certificate.py --course_id 7
 """
 
 
@@ -391,7 +391,7 @@ if __name__ == '__main__':
     parser.add_argument("--order_id", default=None, help="Attendee order identification number")
     parser.add_argument("--language", default=None, choices=['fr', 'en'],  help="Event language. en = english ; fr = french")
     parser.add_argument("--certificate_dir", default="./certificates", help="Directory to write the certificates.")
-    parser.add_argument("--event_id", help="EventBrite event id", required=True)
+    parser.add_argument("--course_id", help="Course ID from the calendar spreadsheet", required=True)
     parser.add_argument("--certificate_svg_tplt_dir",default="./secrets/Attestation_template", help="Directory that holds certificate templates.")
     parser.add_argument("--gmail_user", help="Gmail username", type=str, default=None)
     parser.add_argument("--gmail_password", help="Gmail password", type=str, default=None)
@@ -400,6 +400,7 @@ if __name__ == '__main__':
     parser.add_argument("--send_atnd", default=False, help="Send the certificate to each attendee", action="store_true")
     parser.add_argument("--self_email", help="Email to send tests to", type=str, default=None)
     parser.add_argument('--number_to_send', help="Total number of certificates to send", type=int, default=-1)
+    parser.add_argument('--dry-run', default=False, action='store_true', help="Dry-run: print actions without executing them")
     args = parser.parse_args()
 
 
@@ -409,8 +410,12 @@ if __name__ == '__main__':
     # Initialize EventBrite interface:
     eb = Eventbrite.EventbriteInterface(global_config['eventbrite']['api_key'])
 
+    # Resolve course_id to EventBrite event id via the calendar:
+    calendar = CQORCcalendar.Calendar(global_config, args)
+    eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
+
     # Get event information:
-    eb_event = eb.get_event(args.event_id)
+    eb_event = eb.get_event(eventbrite_id)
 
     # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
@@ -419,15 +424,25 @@ if __name__ == '__main__':
     attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
 
     # Write the certificates:
-    write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
+    if args.dry_run:
+        print(f"Dry-run: would generate {len(attended_guest)} certificate(s) in '{args.certificate_dir}'")
+        for guest in attended_guest:
+            print(f"  {guest['first_name']} {guest['last_name']} -> {guest['filename']}")
+    else:
+        write_certificates(eb_event, attended_guest, args.certificate_svg_tplt_dir, args.language, args.certificate_dir)
 
-    # Get email config, in email.cfg:
-
-    gmail_user = global_config['email']['user']
-    gmail_password = global_config['email']['password']
-    
+    # Get email config, in email.cfg (command-line args take precedence):
+    gmail_user = args.gmail_user or global_config['email']['user']
+    gmail_password = args.gmail_password or global_config['email']['password']
 
     # Create email:
     if args.send_atnd or args.send_self:
-        send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
+        if args.dry_run:
+            if args.send_self:
+                target = args.self_email or gmail_user
+                print(f"Dry-run: would send {len(attended_guest)} email(s) to {target}")
+            else:
+                print(f"Dry-run: would send an email to each of {len(attended_guest)} attendee(s)")
+        else:
+            send_email(eb_event, attended_guest, args.email_tplt_dir, args.send_self, args.number_to_send, args.language, args.self_email, gmail_user=gmail_user, gmail_password=gmail_password, attach_certificate=True)
 

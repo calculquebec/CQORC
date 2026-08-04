@@ -23,6 +23,7 @@ parser.add_argument("--config_dir", default=".", help="Directory that holds the 
 parser.add_argument("--secrets_dir", default="./secrets", help="Directory that holds the configuration files")
 parser.add_argument("--create_template_file", default=False, action='store_true', help="Create a spreadsheet to act as template file")
 parser.add_argument("--update", default=False, action='store_true', help="Update existing spreadsheet instead of creating a new one")
+parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run: print actions without executing them")
 args = parser.parse_args()
 
 # read configuration files
@@ -109,6 +110,9 @@ new_file_name = eval('f' + repr(filename_template))
 source_file_id = config.get("template_%s" % locale, config["template_en"])
 if args.update:
     sheet_id = gdrive.get_file_id(config['google_drive_folder_id'], new_file_name)
+elif args.dry_run:
+    print(f"Dry-run: would copy template to '{new_file_name}' in Google Drive folder {config['google_drive_folder_id']}")
+    sheet_id = None
 else:
     new_file = gdrive.copy_file(source_file_id, new_file_name, config['google_drive_folder_id'])
     sheet_id = new_file['id']
@@ -116,7 +120,8 @@ else:
 # update the spreadsheet
 header = [[url], [password]]
 header_range = config['header_range']
-gsheets.update_values(sheet_id, header_range, header)
+if not args.dry_run:
+    gsheets.update_values(sheet_id, header_range, header)
 
 
 # Create the data to be inserted, sort by name alphabetically
@@ -132,12 +137,14 @@ data = [
 ]
 
 data_range = config['data_range']
-gsheets.update_values(sheet_id, data_range, data)
+if args.dry_run:
+    print(f"Dry-run: would update spreadsheet '{new_file_name}' with url={url}, password={password} and {len(data)} attendees")
+else:
+    gsheets.update_values(sheet_id, data_range, data)
+    # clone the spreadsheet protection
+    gsheets.copy_protection(source_file_id, sheet_id)
 
-# clone the spreadsheet protection
-gsheets.copy_protection(source_file_id, sheet_id)
-
-sheet_url = gdrive.get_file_url(sheet_id)
+sheet_url = gdrive.get_file_url(sheet_id) if sheet_id else f"<new spreadsheet: {new_file_name}>"
 
 print(f"URL: {sheet_url}")
 
@@ -146,7 +153,7 @@ slack = SlackInterface.SlackInterface(global_config['slack']['bot_token'])
 
 channel_name = course['sessions'][0]['slack_channel']
 
-if not slack.is_member(channel_name):
+if not args.dry_run and not slack.is_member(channel_name):
     slack.join_channel(channel_name)
 
 
@@ -157,12 +164,16 @@ else:
 
 start = to_iso8061(event['start']['local'])
 
-# post now
-slack.post_to_channel(channel_name, message)
+if args.dry_run:
+    print(f"Dry-run: would post to Slack channel '{channel_name}': {message}")
+    print(f"Dry-run: would {'update' if args.update else 'add'} bookmark in '{channel_name}': {sheet_url}")
+else:
+    # post now
+    slack.post_to_channel(channel_name, message)
 
-# post a reminder 30 minutes before start
-# post_time = start + datetime.timedelta(minutes=-30)
-# slack.post_to_channel(channel_name, message, post_time)
+    # post a reminder 30 minutes before start
+    # post_time = start + datetime.timedelta(minutes=-30)
+    # slack.post_to_channel(channel_name, message, post_time)
 
 # add a bookmark
 if args.update:

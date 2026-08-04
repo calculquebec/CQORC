@@ -92,6 +92,7 @@ for course in courses:
             else:
                 slack.create_channel(slack_channel_name)
                 calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
+                print(f"Channel {slack_channel_name} created for course {course['course_id']}")
 
         if args.invites:
             attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
@@ -104,6 +105,7 @@ for course in courses:
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.invite_to_channel(slack_channel_name, attendees)
+                print(f"Invited {attendees} to channel {slack_channel_name}")
 
         if args.bookmarks:
             if first_session['zoom_id']:
@@ -130,6 +132,7 @@ for course in courses:
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.update_channel_bookmarks(slack_channel_name, bookmarks)
+                print(f"Updated bookmarks for channel {slack_channel_name}")
 
         if args.archive:
             if args.dry_run:
@@ -137,6 +140,7 @@ for course in courses:
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.archive_channel(slack_channel_name)
+                print(f"Archived channel {slack_channel_name}")
 
         if args.wipe_messages:
             if args.dry_run:
@@ -144,6 +148,7 @@ for course in courses:
                 print(f"Dry-run: would run {cmd}")
             else:
                 slack.wipe_channel_scheduled_messages(slack_channel_name)
+                print(f"Wiped scheduled messages for channel {slack_channel_name}")
 
         if args.list_messages:
             if args.dry_run:
@@ -164,6 +169,7 @@ for course in courses:
 
             messages = []
             equipe_techno_email = [trainers.slack_email(key.split()[0]) for key in get_trainer_keys(course, ['equipe_techno'])]
+            analysts_tagged = ""
 
             if equipe_techno_email:
                 equipe_techno_id_list = []
@@ -214,6 +220,7 @@ for course in courses:
                     print(f"Dry-run: would run {cmd}")
                 else:
                     slack.post_to_channel(slack_channel_name, message['message'], message['time'])
+                    print(f"Scheduled message for channel {slack_channel_name} at {message['time']}: {message['message']}")
 
     except Exception as e:
         print(f"Error encountered when processing course {course}: \n\n{e}")
@@ -221,5 +228,4 @@ for course in courses:
 
 if not args.dry_run:
     calendar.update_spreadsheet()
-
 
