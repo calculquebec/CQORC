@@ -174,8 +174,8 @@ else:
     # post_time = start + datetime.timedelta(minutes=-30)
     # slack.post_to_channel(channel_name, message, post_time)
 
-    # add a bookmark
-    if args.update:
-        slack.update_channel_bookmarks(channel_name, [{"title": "Username spreadhseet", "link": sheet_url}])
-    else:
-        slack.add_bookmark_to_channel(channel_name, "Username spreadhseet", sheet_url)
+# add a bookmark
+if args.update:
+    slack.update_channel_bookmarks(channel_name, [{"title": "Username spreadsheet", "link": sheet_url}])
+else:
+    slack.add_bookmark_to_channel(channel_name, "Username spreadsheet", sheet_url)
