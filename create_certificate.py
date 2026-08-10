@@ -10,6 +10,7 @@ import yaml
 import getpass
 import smtplib
 import sys
+import locale
 
 from datetime import datetime
 from email import encoders
@@ -112,6 +113,16 @@ def safe_filename(filename):
 
     return filename.upper()
 
+DATE_FORMAT = {
+    'fr': '%e %B %Y',
+    'en': '%B %e %Y',
+}
+
+def format_date(date_str, language):
+    """Convert YYYY-MM-DD into a localized date string with month name (e.g., '4 août 2026' or 'August 4, 2026')."""
+    locale.setlocale(locale.LC_ALL, f"{language}_CA")
+    return datetime.strptime(date_str, "%Y-%m-%d").strftime(DATE_FORMAT[language]).strip()
+
 def safe_name(name):
     rules = {"&" : " and ",
              "\\": "/"    }
@@ -119,9 +130,9 @@ def safe_name(name):
     for old, new in rules.items():
         name = name.replace(old, new)
 
-    return name.upper()
+    return name.title()
 
-def build_registrant_list(event, guests, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
+def build_registrant_list(event, guests, code, personnalized_certificate, title, duration, date, language, first_name, last_name, order_id, email_attendee, certificate_dir):
     """
     Generate a registration list.    
 
@@ -133,6 +144,9 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     guests : dict
         Get information for attendees that participated, that is that have their status to `checked in` or `attended`.
         get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])  
+
+    code : str
+        Event code
 
     title : str
         Event title
@@ -153,9 +167,12 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     Returns - Python dictionary with formatted attendees information
     """
   
-    # Set title:
+    # Set title: always normalize as "code - title" when code is available.
+    title = (title or '').strip()
     if not title:
         title = event['name']['text'].strip()
+    if code and not title.startswith(f"{code} - "):
+        title = f"{code} - {title}"
 
     # Set duration:
     if not duration:
@@ -175,15 +192,18 @@ def build_registrant_list(event, guests, personnalized_certificate, title, durat
     # Complete duration with the right term for time spelling:
     if language == "en":
         if float(duration) <= 1.0:
-            duration = str(duration) + " hour."
+            duration = str(duration) + " hour"
         else:
-            duration = str(duration) + " hours."
+            duration = str(duration) + " hours"
 
     elif language == "fr":
         if float(duration) <= 1.0:
-            duration = str(duration) + " heure."
+            duration = str(duration) + " heure"
         else:
-            duration = str(duration) + " heures."
+            duration = str(duration) + " heures"
+
+    # Format date according to language:
+    date = format_date(date, language)
 
     filename_template = os.path.join(certificate_dir,  ATTESTATION_CQ_TEMPLATE)
 
@@ -478,7 +498,9 @@ if __name__ == '__main__':
 
     # Resolve course_id to EventBrite event id via the calendar:
     calendar = CQORCcalendar.Calendar(global_config, args)
-    eventbrite_id = calendar[args.course_id]['sessions'][0]['eventbrite_id']
+    first_session = calendar[args.course_id]['sessions'][0]
+    eventbrite_id = first_session['eventbrite_id']
+    code = first_session['code']
 
     # Google drive interface:
     credentials_file = global_config['google']['credentials_file']
@@ -492,9 +514,24 @@ if __name__ == '__main__':
     # Get information for attendees that participated, that is that have their status to `checked in` or `attended`:
     eb_attendees = eb.get_event_attendees_present(eb_event['id'], fields = ['title', 'email', 'first_name', 'last_name', 'status', 'name', 'order_id'])
 
+    title = args.title or first_session.get('title')
+
     # Generate a registration list:
-    attended_guest = build_registrant_list(eb_event, eb_attendees, args.personnalized_certificate, args.title, args.duration, args.date, args.language, args.first_name, args.last_name, args.order_id, args.email_attendee, args.certificate_dir)
-    generated_certificate_files = [guest['filename'] for guest in attended_guest]
+    attended_guest = build_registrant_list(
+        eb_event,
+        eb_attendees,
+        code,
+        args.personnalized_certificate,
+        title,
+        args.duration,
+        args.date,
+        args.language,
+        args.first_name,
+        args.last_name,
+        args.order_id,
+        args.email_attendee,
+        args.certificate_dir
+    )
 
     # Write the certificates:
     if args.dry_run:
