@@ -10,6 +10,7 @@ import getpass
 import smtplib
 import sys
 import locale
+import re
 
 from datetime import datetime
 from email import encoders
@@ -168,7 +169,8 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
     title = (title or '').strip()
     if not title:
         title = event['name']['text'].strip()
-    if code and not title.startswith(f"{code} - "):
+    # Only add code if title doesn't already start with a code pattern (e.g., "CIQ101 - ")
+    if code and not re.match(r'^[A-Z]{2,4}\d{2,3}\s*-\s*', title):
         title = f"{code} - {title}"
 
     # Set duration:
