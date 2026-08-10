@@ -186,18 +186,22 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
     if not language:
         language = event['locale'].split("_")[0]
         
+    # Convert to int if it's a whole number (X.0), otherwise keep as float
+    duration_float = float(duration)
+    duration_value = int(duration_float) if duration_float == int(duration_float) else duration_float
+    
     # Complete duration with the right term for time spelling:
     if language == "en":
-        if float(duration) <= 1.0:
-            duration = str(duration) + " hour"
+        if float(duration) <= 1:
+            duration = str(duration_value) + " hour"
         else:
-            duration = str(duration) + " hours"
+            duration = str(duration_value) + " hours"
 
     elif language == "fr":
-        if float(duration) <= 1.0:
-            duration = str(duration) + " heure"
+        if float(duration) <= 1:
+            duration = str(duration_value) + " heure"
         else:
-            duration = str(duration) + " heures"
+            duration = str(duration_value) + " heures"
 
     # Format date according to language:
     date = format_date(date, language)
