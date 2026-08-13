@@ -5,8 +5,7 @@ import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.google.GCalInterface as GCalInterface
 import CQORCcalendar
 
-from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config
-from common import extract_course_code_from_title
+from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
 from common import get_trainer_keys
 from common import Trainers
 from collections import Counter
@@ -56,8 +55,8 @@ latest_sessions_duplicate_course = {}
 for item in sessions:
     course_id = item["course_id"]
     if course_id in duplicate_ids:
-        current_end = datetime.strptime(item["end_date"], "%Y-%m-%d %H:%M:%S")
-        if course_id not in latest_sessions_duplicate_course or current_end > datetime.strptime(latest_sessions_duplicate_course[course_id]["end_date"], "%Y-%m-%d %H:%M:%S"):
+        current_end = to_iso8061(item["end_date"])
+        if course_id not in latest_sessions_duplicate_course or current_end > to_iso8061(latest_sessions_duplicate_course[course_id]["end_date"]):
             latest_sessions_duplicate_course[course_id] = item
 latest_session = list(latest_sessions_duplicate_course.values())
 latest_session = [session for session in latest_session if args.course_id == session['course_id']]
@@ -82,14 +81,14 @@ for session in sessions:
         post_mortem_doc_link = config['slack']['post_mortem_link']
         event_dict = {
             "course": {
-                "title": f"{session['code']} - {session['title']}",
+                "title": f"{get_title(session)}",
                 "start_time": to_iso8061(session['start_date']) + timedelta(minutes=start_offset_minutes),
                 "end_time": to_iso8061(session['end_date']),
                 "description": f"""Voyez l'invitation envoyée par Zoom, ou encore le canal sur Slack pour les liens""",
                 "session_id": 'private_gcal_id'
             },
             "post_mortem": {
-                "title": f"{session['code']} - {session['title']} - post mortem",
+                "title": f"{get_title(session)} - post mortem",
                 "start_time": to_iso8061(session['end_date']),
                 "end_time":  to_iso8061(session['end_date']) + timedelta(minutes=30),
                 "description": f"""Voici le lien Google Meet <a href="{google_meet_link}">{google_meet_link}</a> et le Google doc post-mortem <a href="{post_mortem_doc_link}">{post_mortem_doc_link}</a>. Le google doc post-mortem se retrouve aussi sur le canal Slack""",
