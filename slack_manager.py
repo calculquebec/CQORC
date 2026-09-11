@@ -92,7 +92,7 @@ for course in courses:
             else:
                 slack.create_channel(slack_channel_name)
                 calendar.set_slack_channel(first_session['course_id'], slack_channel_name)
-                print(f"Channel {slack_channel_name} created for course {course['course_id']}")
+                print(f"Channel {slack_channel_name} created for course {first_session['course_id']}")
 
         if args.invites:
             attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
