@@ -105,7 +105,7 @@ for session in sessions:
             title = eb_event['name']['text']
 
         if session['language'].lower() == "fr":
-            presence = "en ligne" if session['site'] in ("online", "en ligne") else "onsite"
+            presence = "online" if session['site'] in ("online", "en ligne") else "onsite"
             description = f"""Inscriptions: {registration_url}
 
 {summary}
