@@ -354,6 +354,8 @@ class EventbriteInterface(eb.Eventbrite):
                         for subdict in info.keys():
                             if isinstance(info[subdict], dict) and field in info[subdict]:
                                 filtered_info[field] = info[subdict][field]
+                if 'name' in filtered_info:
+                    filtered_info['name'] = normalize_attendee_name(filtered_info['name'])
                 filtered_view[email] = filtered_info
             attendees = filtered_view
 
@@ -374,14 +376,9 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        attendees = self.get_event_attendees_by_status(
+        return self.get_event_attendees_by_status(
             event_id, status_filter=('attending'), fields=fields
         )
-
-        for attendee in attendees.values():
-            attendee['name'] = normalize_attendee_name(attendee.get('name'))
-
-        return attendees
 
 
     def get_event_attendees_present(self, event_id, fields = None):
