@@ -84,7 +84,11 @@ attendees = eb.get_event_attendees_registered(eventbrite_id, fields = ['email', 
 
 date = to_iso8061(event["start"]["local"]).date()
 title = get_title(course['sessions'][0])
-locale = course['sessions'][0]['language']
+locale = str(course['sessions'][0]['language']).strip().lower()
+if locale.startswith('fr'):
+    locale = 'fr'
+elif locale.startswith('en'):
+    locale = 'en'
 
 if args.course_code:
     course_code = args.course_code
