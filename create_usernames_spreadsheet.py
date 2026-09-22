@@ -83,6 +83,7 @@ if not course:
 attendees = eb.get_event_attendees_registered(eventbrite_id, fields = ['email', 'name'])
 
 date = to_iso8061(event["start"]["local"]).date()
+title = get_title(course['sessions'][0])
 locale = course['sessions'][0]['language']
 
 if args.course_code:
