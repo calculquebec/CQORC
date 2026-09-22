@@ -1,6 +1,6 @@
 #!/bin/env python3
 
-import os, argparse, datetime
+import os, argparse, datetime, re
 
 import interfaces.eventbrite.EventbriteInterface as Eventbrite
 import interfaces.google.GDriveInterface as GDriveInterface
@@ -9,6 +9,29 @@ import interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title
+
+
+def normalize_attendee_name(name):
+    if isinstance(name, bytes):
+        return name.decode('utf-8')
+
+    if isinstance(name, str):
+        serialized_name = re.fullmatch(
+            r"\s*b(['\"])(.*?)\1\s+b(['\"])(.*?)\3\s*", name
+        )
+        if serialized_name:
+            components = [serialized_name.group(2), serialized_name.group(4)]
+            for index, component in enumerate(components):
+                if r'\x' in component:
+                    components[index] = (
+                        component.encode('ascii')
+                        .decode('unicode_escape')
+                        .encode('latin-1')
+                        .decode('utf-8')
+                    )
+            return ' '.join(components)
+
+    return name
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--course_id", default=None, help="Manage only for this course id")
@@ -82,9 +105,16 @@ if not course:
 # retrieve list of attendees
 attendees = eb.get_event_attendees_registered(eventbrite_id, fields = ['email', 'name'])
 
+for attendee in attendees.values():
+    attendee['name'] = normalize_attendee_name(attendee['name'])
+
 date = to_iso8061(event["start"]["local"]).date()
 title = get_title(course['sessions'][0])
-locale = course['sessions'][0]['language']
+locale = str(course['sessions'][0]['language']).strip().lower()
+if locale.startswith('fr'):
+    locale = 'fr'
+elif locale.startswith('en'):
+    locale = 'en'
 
 if args.course_code:
     course_code = args.course_code
