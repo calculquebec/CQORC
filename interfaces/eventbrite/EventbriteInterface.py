@@ -4,7 +4,32 @@ import os
 import itertools
 import configparser
 import logging
+import re
 from datetime import datetime, timezone
+
+
+def normalize_attendee_name(name):
+    if isinstance(name, bytes):
+        return name.decode('utf-8')
+
+    if not isinstance(name, str):
+        return name
+
+    serialized_name = re.fullmatch(
+        r"\s*b(['\"])(.*?)\1\s+b(['\"])(.*?)\3\s*", name
+    )
+    if not serialized_name:
+        return name
+
+    components = [serialized_name.group(2), serialized_name.group(4)]
+    for index, component in enumerate(components):
+        escaped_bytes = re.findall(r"(?:\\x[0-9a-fA-F]{2})+", component)
+        for escaped in escaped_bytes:
+            byte_values = bytes.fromhex(escaped.replace('\\x', ''))
+            component = component.replace(escaped, byte_values.decode('utf-8'))
+        components[index] = component
+
+    return ' '.join(components)
 
 
 class EventbriteInterface(eb.Eventbrite):
@@ -349,7 +374,14 @@ class EventbriteInterface(eb.Eventbrite):
         -------
         attendees: a dictionary mapping email addresses the attendee information
         """
-        return self.get_event_attendees_by_status(event_id, status_filter=('attending'), fields=fields)
+        attendees = self.get_event_attendees_by_status(
+            event_id, status_filter=('attending'), fields=fields
+        )
+
+        for attendee in attendees.values():
+            attendee['name'] = normalize_attendee_name(attendee.get('name'))
+
+        return attendees
 
 
     def get_event_attendees_present(self, event_id, fields = None):
