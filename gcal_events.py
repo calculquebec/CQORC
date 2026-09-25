@@ -1,7 +1,6 @@
 #!/bin/env python3
 import os, argparse
 
-import interfaces.zoom.ZoomInterface as ZoomInterface
 import interfaces.google.GCalInterface as GCalInterface
 import CQORCcalendar
 
@@ -35,8 +34,6 @@ credentials_file = config['google']['credentials_file']
 credentials_file_path = os.path.join(secrets_dir, credentials_file)
 timezone = config['google.calendar'].get('timezone', config['global']['timezone'])
 gcal = GCalInterface.GCalInterface(credentials_file_path, config['google.calendar']['calendar_id'], timezone)
-zoom_user = config['zoom']['user']
-zoom = ZoomInterface.ZoomInterface(config['zoom']['account_id'], config['zoom']['client_id'], config['zoom']['client_secret'], config['global']['timezone'], zoom_user)
 
 start_offset_minutes = int(config['google.calendar']['start_offset_minutes'])
 
@@ -76,7 +73,6 @@ else:
 for session in sessions:
     try:
         attendees = [trainers.calendar_email(key) for key in get_trainer_keys(session, ['instructor', 'host', 'assistants'])]
-        webinar = zoom.get_webinar(webinar_id = session['zoom_id'])
         google_meet_link = config['google.calendar']['google_meet_link']
         post_mortem_doc_link = config['slack']['post_mortem_link']
         event_dict = {
