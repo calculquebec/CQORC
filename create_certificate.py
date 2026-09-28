@@ -114,6 +114,13 @@ def safe_filename(filename):
 
     return filename.upper()
 
+def certificate_filename(certificate_dir, first_name, last_name, order_id=None):
+    filename_parts = [safe_filename(first_name), safe_filename(last_name)]
+    if order_id is not None and str(order_id).strip():
+        filename_parts.append(safe_filename(str(order_id).strip()))
+
+    return os.path.join(certificate_dir, f"Attestation_CQ_{'_'.join(filename_parts)}.pdf")
+
 DATE_FORMAT = {
     'fr': '%e %B %Y',
     'en': '%B %e %Y',
@@ -220,8 +227,6 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
             first_name = input("Please enter the fist name of the participant: ")
         if not last_name:
             last_name = input("Please enter the last name of the participant: ")
-        if not order_id:
-            order_id = input("Please enter the order id of the participant: ")
         if not email_attendee:
             email_attendee = input("Please enter the email of the participant: ")
 
@@ -233,7 +238,7 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
             'date': date,
             'duration': duration,
             'order_id': order_id,
-            'filename': filename_template.format(safe_filename(first_name), safe_filename(last_name), order_id)
+            'filename': certificate_filename(certificate_dir, first_name, last_name, order_id)
         }
         attended_guests.append(context)
     else:
@@ -243,7 +248,7 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
             # Set last name:
             last_name = guests[guest]['last_name']
             # Set order id:
-            order_id = guests[guest]['order_id']
+            order_id = guests[guest].get('order_id')
             email = guests[guest]['email']
             context = {
                 'workshop': title,
@@ -253,7 +258,7 @@ def build_registrant_list(event, guests, code, personnalized_certificate, title,
                 'date': date,
                 'duration': duration,
                 'order_id': order_id,
-                'filename': filename_template.format(safe_filename(first_name), safe_filename(last_name), order_id)
+                'filename': certificate_filename(certificate_dir, first_name, last_name, order_id)
             }
             attended_guests.append(context)
     return attended_guests
