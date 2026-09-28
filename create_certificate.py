@@ -538,6 +538,7 @@ if __name__ == '__main__':
         args.email_attendee,
         args.certificate_dir
     )
+    generated_certificate_files = [guest['filename'] for guest in attended_guest]
 
     # Write the certificates:
     if args.dry_run:
