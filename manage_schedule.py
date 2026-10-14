@@ -3,12 +3,14 @@ import os
 import sys
 import re
 import argparse
+import csv
+import io
 import pytz
 from datetime import datetime, date, timedelta
 
 import CQORCcalendar
 import interfaces.google.GCalInterface as GCalInterface
-from common import get_config, get_title
+from common import get_config, get_title, Trainers
 
 # Columns whose values must be kept intact from the source session
 KEEP_COLUMNS = {
@@ -784,6 +786,375 @@ def action_clear_calendar(args, global_config):
 
 
 # ---------------------------------------------------------------------------
+# Role Summary Helpers and Action
+# ---------------------------------------------------------------------------
+def load_trainers(global_config, args):
+    """
+    Attempts to load the Trainers database from global_config and args/secrets_dir.
+    Returns a Trainers instance or None if not found/error.
+    """
+    try:
+        trainers_db = global_config.get('global', 'trainers_db', fallback=None)
+    except Exception:
+        trainers_db = None
+    if not trainers_db:
+        return None
+
+    secrets_dir = os.environ.get('CQORC_SECRETS_DIR', getattr(args, 'secrets_dir', './secrets'))
+    candidate_paths = [
+        trainers_db,
+        os.path.join(secrets_dir, os.path.basename(trainers_db)),
+        os.path.join(getattr(args, 'config_dir', '.'), trainers_db),
+    ]
+
+    for p in candidate_paths:
+        if os.path.exists(p):
+            try:
+                return Trainers(p)
+            except Exception as e:
+                if getattr(args, 'verbose', False):
+                    print(f"Warning: could not load trainers database from '{p}': {e}")
+                return None
+    return None
+
+
+def get_trainer_info(trainers, key):
+    """
+    Looks up trainer in Trainers database by exact match or case-insensitive match.
+    Returns (fullname, home_institution). Falls back to (key, '').
+    """
+    if not trainers or not key:
+        return key, ''
+
+    # Exact match
+    try:
+        fn = trainers.fullname(key)
+        inst = trainers.home_institution(key)
+        return fn, inst
+    except (KeyError, Exception):
+        pass
+
+    # Case-insensitive match fallback
+    try:
+        for k in trainers.trainers():
+            if k.lower() == key.lower():
+                return trainers.fullname(k), trainers.home_institution(k)
+    except Exception:
+        pass
+
+    return key, ''
+
+
+def compute_role_summary(sessions, roles=None, trainers=None):
+    """
+    Computes summary statistics for role involvement across course sessions.
+
+    Args:
+        sessions: list of session dictionaries from Calendar/sheet.
+        roles: list of role column names to inspect (default: ['instructor', 'host', 'assistants']).
+        trainers: optional Trainers object to look up full names and institutions.
+
+    Returns:
+        dict with:
+            'roles': list of role names
+            'person_stats': dict of person_key -> dict of statistics
+            'role_totals': dict of role -> total assignment count
+            'total_assignments': int
+            'unassigned': dict of role -> count of sessions with no one assigned
+            'total_sessions': int (valid non-empty course sessions)
+    """
+    if roles is None:
+        roles = ['instructor', 'host', 'assistants']
+    else:
+        roles = [r.strip().lower() for r in roles if r.strip()]
+
+    stats = {}
+    unassigned = {r: 0 for r in roles}
+    role_totals = {r: 0 for r in roles}
+    total_sessions = 0
+
+    for s in sessions:
+        cid = (s.get('course_id') or '').strip()
+        title = (s.get('title') or '').strip()
+        sdate = (s.get('start_date') or '').strip()
+        # Skip completely blank or placeholder instruction rows
+        if not cid and not title and not sdate:
+            continue
+
+        total_sessions += 1
+
+        h_str = s.get('hours') or '0'
+        try:
+            h_val = float(str(h_str).replace(',', '.'))
+        except (ValueError, TypeError):
+            h_val = 0.0
+
+        for r in roles:
+            val = s.get(r) or ''
+            people = [p.strip() for p in val.split(',') if p.strip()]
+            # Deduplicate per session while preserving order
+            seen_people = []
+            for p in people:
+                if p not in seen_people:
+                    seen_people.append(p)
+
+            if not seen_people:
+                unassigned[r] += 1
+            else:
+                role_totals[r] += len(seen_people)
+                for p in seen_people:
+                    if p not in stats:
+                        fullname, inst = get_trainer_info(trainers, p)
+                        stats[p] = {
+                            'key': p,
+                            'fullname': fullname,
+                            'institution': inst,
+                            'roles': {role: 0 for role in roles},
+                            'total_events': 0,
+                            'hours_by_role': {role: 0.0 for role in roles},
+                            'total_hours': 0.0
+                        }
+                    stats[p]['roles'][r] += 1
+                    stats[p]['total_events'] += 1
+                    stats[p]['hours_by_role'][r] += h_val
+                    stats[p]['total_hours'] += h_val
+
+    total_assignments = sum(role_totals.values())
+
+    return {
+        'roles': roles,
+        'person_stats': stats,
+        'role_totals': role_totals,
+        'total_assignments': total_assignments,
+        'unassigned': unassigned,
+        'total_sessions': total_sessions
+    }
+
+
+def sort_summary_items(person_stats_list, sort_by="total", roles=None):
+    """
+    Sorts a list of person_stats dicts according to sort_by criterion.
+    """
+    sort_by = (sort_by or "total").lower()
+    roles = roles or ['instructor', 'host', 'assistants']
+
+    if sort_by in roles:
+        return sorted(
+            person_stats_list,
+            key=lambda x: (-x['roles'].get(sort_by, 0), -x['total_events'], x['fullname'].lower())
+        )
+    elif sort_by in ("hours", "total_hours"):
+        return sorted(
+            person_stats_list,
+            key=lambda x: (-x['total_hours'], -x['total_events'], x['fullname'].lower())
+        )
+    elif sort_by in ("name", "fullname"):
+        return sorted(
+            person_stats_list,
+            key=lambda x: (x['fullname'].lower(), x['key'].lower())
+        )
+    elif sort_by in ("key",):
+        return sorted(
+            person_stats_list,
+            key=lambda x: (x['key'].lower())
+        )
+    else:  # default "total"
+        return sorted(
+            person_stats_list,
+            key=lambda x: (-x['total_events'], -x['total_hours'], x['fullname'].lower())
+        )
+
+
+def build_summary_table_data(summary_data, sort_by="total", by_hours=False):
+    """
+    Converts summary_data into (header, rows, totals_row, unassigned_row).
+    """
+    roles = summary_data['roles']
+    person_stats = summary_data['person_stats']
+    role_totals = summary_data['role_totals']
+    unassigned = summary_data['unassigned']
+
+    grand_total_hours = sum(item['total_hours'] for item in person_stats.values())
+    sorted_stats = sort_summary_items(list(person_stats.values()), sort_by=sort_by, roles=roles)
+
+    if by_hours:
+        role_headers = [f"{r.capitalize()} (hrs)" for r in roles]
+        header = ['Key', 'Full Name', 'Institution'] + role_headers + ['Total Hours', 'Total Events']
+
+        rows = []
+        for item in sorted_stats:
+            row = [item['key'], item['fullname'], item['institution']]
+            for r in roles:
+                row.append(f"{item['hours_by_role'].get(r, 0.0):g}")
+            row.append(f"{item['total_hours']:g}")
+            row.append(str(item['total_events']))
+            rows.append(row)
+
+        totals_row = ['TOTALS', '', '']
+        for r in roles:
+            tot_h = sum(item['hours_by_role'].get(r, 0.0) for item in person_stats.values())
+            totals_row.append(f"{tot_h:g}")
+        totals_row.append(f"{grand_total_hours:g}")
+        totals_row.append(str(summary_data['total_assignments']))
+
+        unassigned_row = ['UNASSIGNED', '(sessions missing role)', '']
+        for r in roles:
+            unassigned_row.append(str(unassigned.get(r, 0)))
+        unassigned_row.append('')
+        unassigned_row.append('')
+    else:
+        role_headers = [r.capitalize() for r in roles]
+        header = ['Key', 'Full Name', 'Institution'] + role_headers + ['Total Events', 'Total Hours']
+
+        rows = []
+        for item in sorted_stats:
+            row = [item['key'], item['fullname'], item['institution']]
+            for r in roles:
+                row.append(str(item['roles'].get(r, 0)))
+            row.append(str(item['total_events']))
+            row.append(f"{item['total_hours']:g}")
+            rows.append(row)
+
+        totals_row = ['TOTALS', '', '']
+        for r in roles:
+            totals_row.append(str(role_totals.get(r, 0)))
+        totals_row.append(str(summary_data['total_assignments']))
+        totals_row.append(f"{grand_total_hours:g}")
+
+        unassigned_row = ['UNASSIGNED', '(sessions missing role)', '']
+        for r in roles:
+            unassigned_row.append(str(unassigned.get(r, 0)))
+        unassigned_row.append('')
+        unassigned_row.append('')
+
+    return header, rows, totals_row, unassigned_row
+
+
+def format_summary_text_table(header, rows, totals_row, unassigned_row, title=None):
+    """
+    Formats the summary data as an ASCII/text table.
+    """
+    all_rows = [header] + rows + [totals_row, unassigned_row]
+    col_widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(header))]
+
+    # Right-align numeric columns (starting from index 3)
+    fmt_parts = []
+    for i, w in enumerate(col_widths):
+        if i >= 3:
+            fmt_parts.append(f"{{:>{w}}}")
+        else:
+            fmt_parts.append(f"{{:<{w}}}")
+    fmt = "  ".join(fmt_parts)
+
+    total_width = sum(col_widths) + 2 * (len(col_widths) - 1)
+    lines = []
+    if title:
+        lines.append(title)
+        lines.append("=" * max(len(title), total_width))
+
+    lines.append(fmt.format(*header))
+    lines.append("  ".join(["-" * w for w in col_widths]))
+
+    for r in rows:
+        lines.append(fmt.format(*r))
+
+    lines.append("  ".join(["-" * w for w in col_widths]))
+    lines.append(fmt.format(*totals_row))
+    lines.append(fmt.format(*unassigned_row))
+    lines.append("=" * total_width)
+
+    return "\n".join(lines)
+
+
+def format_summary_csv(header, rows, totals_row, unassigned_row):
+    """
+    Formats the summary data as CSV text.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    for r in rows:
+        writer.writerow(r)
+    writer.writerow(totals_row)
+    writer.writerow(unassigned_row)
+    return output.getvalue()
+
+
+def action_summary(args, global_config):
+    """
+    Action: create a summary of how many times each person is involved for each type
+    of role over the course of a session.
+    """
+    sheet_name = getattr(args, 'sheet', None) or getattr(args, 'from_sheet', None) or global_config['google'].get('calendar_sheet_name')
+    if not sheet_name:
+        print("Error: --sheet must be specified (or google.calendar_sheet_name set in config).")
+        sys.exit(1)
+
+    csv_arg = getattr(args, 'csv', None)
+    if csv_arg == '-':
+        sys.stderr.write(f"Loading session schedule from sheet '{sheet_name}'...\n")
+    else:
+        print(f"Loading session schedule from sheet '{sheet_name}'...")
+    calendar = CQORCcalendar.Calendar(global_config, args, sheet_name=sheet_name)
+    sessions = calendar.get_all_sessions()
+    trainers = load_trainers(global_config, args)
+
+    roles_arg = getattr(args, 'roles', 'instructor,host,assistants')
+    if isinstance(roles_arg, str):
+        roles = [r.strip().lower() for r in roles_arg.split(',') if r.strip()]
+    else:
+        roles = list(roles_arg)
+
+    by_hours = getattr(args, 'by_hours', False)
+    sort_by = getattr(args, 'sort_by', 'total')
+
+    summary_data = compute_role_summary(sessions, roles=roles, trainers=trainers)
+
+    header, rows, totals_row, unassigned_row = build_summary_table_data(
+        summary_data, sort_by=sort_by, by_hours=by_hours
+    )
+
+    csv_arg = getattr(args, 'csv', None)
+    if csv_arg == '-':
+        csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
+        sys.stdout.write(csv_text)
+    else:
+        title = f"Session '{sheet_name}' Role Involvements Summary ({summary_data['total_sessions']} sessions)"
+        table_text = format_summary_text_table(header, rows, totals_row, unassigned_row, title=title)
+        print("\n" + table_text)
+
+        if csv_arg:
+            csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
+            try:
+                with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
+                    f.write(csv_text)
+                print(f"\nSummary exported to CSV file '{csv_arg}'.")
+            except Exception as e:
+                print(f"\nError exporting to CSV file '{csv_arg}': {e}")
+
+    write_sheet = getattr(args, 'write_sheet', None)
+    if write_sheet:
+        if write_sheet is True or not isinstance(write_sheet, str) or not write_sheet.strip():
+            target_sheet = f"{sheet_name}-summary"
+        else:
+            target_sheet = write_sheet.strip()
+
+        print(f"\nWriting summary to Google Sheet '{target_sheet}'...")
+        try:
+            if not calendar.gsheets.sheet_exists(calendar.spreadsheet_id, target_sheet):
+                if getattr(args, 'verbose', False):
+                    print(f"Creating new sheet tab '{target_sheet}'...")
+                calendar.gsheets.add_sheet(calendar.spreadsheet_id, target_sheet)
+
+            sheet_values = [header] + rows + [totals_row, unassigned_row]
+            calendar.gsheets.clear_values(calendar.spreadsheet_id, "A:Z", target_sheet)
+            calendar.gsheets.update_values(calendar.spreadsheet_id, "A:Z", sheet_values, target_sheet)
+            print(f"Successfully saved summary to sheet tab '{target_sheet}'.")
+        except Exception as e:
+            print(f"Error writing summary to Google Sheet: {e}")
+
+
+# ---------------------------------------------------------------------------
 # CLI Entry Point
 # ---------------------------------------------------------------------------
 def main():
@@ -793,13 +1164,13 @@ def main():
     # Global options / Top-level fallback flags
     parser.add_argument(
         "--action",
-        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar"],
-        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar)"
+        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar", "summary", "role-summary", "roles-summary"],
+        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar, summary)"
     )
     parser.add_argument(
         "--sheet",
         default=None,
-        help="Sheet name to operate on (for calendar actions)"
+        help="Sheet name to operate on (for calendar and summary actions)"
     )
     parser.add_argument(
         "--from",
@@ -824,6 +1195,34 @@ def main():
         action="store_true",
         default=False,
         help="Force recreating events even if gcal ID is already set (sync-to-calendar)"
+    )
+    parser.add_argument(
+        "--roles",
+        default="instructor,host,assistants",
+        help="Comma-separated roles for summary (default: instructor,host,assistants)"
+    )
+    parser.add_argument(
+        "--sort-by",
+        default="total",
+        help="Sort summary by: total, hours, name, key, or role name (default: total)"
+    )
+    parser.add_argument(
+        "--by-hours",
+        action="store_true",
+        default=False,
+        help="Display breakdown of hours instead of event counts in the summary"
+    )
+    parser.add_argument(
+        "--write-sheet",
+        nargs="?",
+        const=True,
+        default=None,
+        help="Write summary table to Google Sheet (optional sheet name, defaults to <sheet>-summary)"
+    )
+    parser.add_argument(
+        "--csv",
+        default=None,
+        help="Export summary table to CSV file (or '-' for stdout)"
     )
     parser.add_argument(
         "--dry-run",
@@ -888,6 +1287,22 @@ def main():
     p_clear.add_argument("--config_dir", default=".", help="Config dir")
     p_clear.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
 
+    # Subcommand: summary
+    p_summary = subparsers.add_parser(
+        "summary",
+        aliases=["role-summary", "roles-summary"],
+        help="Summary of how many times each person is involved for each type of role over the course of a session"
+    )
+    p_summary.add_argument("--sheet", default=None, help="Sheet name to summarize (e.g. A26; default: calendar_sheet_name in config)")
+    p_summary.add_argument("--roles", default="instructor,host,assistants", help="Comma-separated roles (default: instructor,host,assistants)")
+    p_summary.add_argument("--sort-by", default="total", help="Sort by: total, hours, name, key, or role name (default: total)")
+    p_summary.add_argument("--by-hours", action="store_true", default=False, help="Display breakdown of hours instead of event counts")
+    p_summary.add_argument("--write-sheet", nargs="?", const=True, default=None, help="Write summary table to Google Sheet (optional sheet name, defaults to <sheet>-summary)")
+    p_summary.add_argument("--csv", default=None, help="Export summary table to CSV file (or '-' for stdout)")
+    p_summary.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output")
+    p_summary.add_argument("--config_dir", default=".", help="Config dir")
+    p_summary.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
+
     args = parser.parse_args()
 
     # Determine action
@@ -916,6 +1331,8 @@ def main():
         action_sync_from_calendar(args, global_config)
     elif action == "clear-calendar":
         action_clear_calendar(args, global_config)
+    elif action in ("summary", "role-summary", "roles-summary"):
+        action_summary(args, global_config)
     else:
         print(f"Unknown action: {action}")
         sys.exit(1)

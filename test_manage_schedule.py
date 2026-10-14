@@ -214,5 +214,134 @@ class TestManageSchedule(unittest.TestCase):
         # Without the sentinel, nothing is parsed (graceful degradation)
         self.assertEqual(parsed, {})
 
+    def test_compute_role_summary(self):
+        sessions = [
+            {
+                'course_id': '1', 'title': 'Course 1', 'start_date': '2026-09-20 10:00:00',
+                'instructor': 'Alice', 'host': 'Bob', 'assistants': 'Charlie, David', 'hours': '3'
+            },
+            {
+                'course_id': '2', 'title': 'Course 2', 'start_date': '2026-09-21 10:00:00',
+                'instructor': 'Bob', 'host': 'Bob', 'assistants': 'Alice', 'hours': '2.5'
+            },
+            {
+                'course_id': '3', 'title': 'Course 3', 'start_date': '2026-09-22 10:00:00',
+                'instructor': 'Alice', 'host': '', 'assistants': '', 'hours': '1'
+            },
+            # Completely blank / placeholder row (should be skipped)
+            {
+                'course_id': '', 'title': '', 'start_date': '',
+                'instructor': '', 'host': '', 'assistants': 'Dummy note', 'hours': ''
+            }
+        ]
+
+        summary = manage_schedule.compute_role_summary(sessions)
+        self.assertEqual(summary['total_sessions'], 3)
+
+        # Alice: Instructor 2 (courses 1, 3), Assistant 1 (course 2) -> Total 3
+        alice = summary['person_stats']['Alice']
+        self.assertEqual(alice['roles']['instructor'], 2)
+        self.assertEqual(alice['roles']['host'], 0)
+        self.assertEqual(alice['roles']['assistants'], 1)
+        self.assertEqual(alice['total_events'], 3)
+        self.assertEqual(alice['total_hours'], 6.5)
+
+        # Bob: Host 2 (courses 1, 2), Instructor 1 (course 2) -> Total 3
+        bob = summary['person_stats']['Bob']
+        self.assertEqual(bob['roles']['instructor'], 1)
+        self.assertEqual(bob['roles']['host'], 2)
+        self.assertEqual(bob['roles']['assistants'], 0)
+        self.assertEqual(bob['total_events'], 3)
+        self.assertEqual(bob['hours_by_role']['instructor'], 2.5)
+        self.assertEqual(bob['hours_by_role']['host'], 5.5)
+        self.assertEqual(bob['total_hours'], 8.0)
+
+        # Charlie: Assistant 1 (course 1) -> Total 1
+        charlie = summary['person_stats']['Charlie']
+        self.assertEqual(charlie['total_events'], 1)
+        self.assertEqual(charlie['roles']['assistants'], 1)
+        self.assertEqual(charlie['total_hours'], 3.0)
+
+        # David: Assistant 1 (course 1) -> Total 1
+        david = summary['person_stats']['David']
+        self.assertEqual(david['total_events'], 1)
+        self.assertEqual(david['roles']['assistants'], 1)
+
+        # Role totals & unassigned
+        self.assertEqual(summary['role_totals']['instructor'], 3)
+        self.assertEqual(summary['role_totals']['host'], 2)
+        self.assertEqual(summary['role_totals']['assistants'], 3)
+        self.assertEqual(summary['total_assignments'], 8)
+        self.assertEqual(summary['unassigned']['instructor'], 0)
+        self.assertEqual(summary['unassigned']['host'], 1)  # course 3 missing host
+        self.assertEqual(summary['unassigned']['assistants'], 1)  # course 3 missing assistants
+
+    def test_compute_role_summary_deduplication(self):
+        """If someone is listed twice in the same role cell for a session, count once."""
+        sessions = [
+            {
+                'course_id': '1', 'title': 'Course 1', 'start_date': '2026-09-20 10:00:00',
+                'instructor': 'Alice', 'host': 'Bob', 'assistants': 'Charlie, Charlie', 'hours': '2'
+            }
+        ]
+        summary = manage_schedule.compute_role_summary(sessions)
+        self.assertEqual(summary['person_stats']['Charlie']['total_events'], 1)
+        self.assertEqual(summary['person_stats']['Charlie']['roles']['assistants'], 1)
+        self.assertEqual(summary['role_totals']['assistants'], 1)
+
+    def test_sort_summary_items(self):
+        items = [
+            {'key': 'B', 'fullname': 'Bob', 'roles': {'instructor': 1, 'host': 2}, 'total_events': 3, 'total_hours': 10.0},
+            {'key': 'A', 'fullname': 'Alice', 'roles': {'instructor': 4, 'host': 0}, 'total_events': 4, 'total_hours': 8.0},
+            {'key': 'C', 'fullname': 'Charlie', 'roles': {'instructor': 0, 'host': 1}, 'total_events': 1, 'total_hours': 12.0},
+        ]
+        # Sort by total (default)
+        sorted_tot = manage_schedule.sort_summary_items(items, sort_by="total")
+        self.assertEqual([x['key'] for x in sorted_tot], ['A', 'B', 'C'])
+
+        # Sort by instructor
+        sorted_inst = manage_schedule.sort_summary_items(items, sort_by="instructor")
+        self.assertEqual([x['key'] for x in sorted_inst], ['A', 'B', 'C'])
+
+        # Sort by host
+        sorted_host = manage_schedule.sort_summary_items(items, sort_by="host")
+        self.assertEqual([x['key'] for x in sorted_host], ['B', 'C', 'A'])
+
+        # Sort by hours
+        sorted_hrs = manage_schedule.sort_summary_items(items, sort_by="hours")
+        self.assertEqual([x['key'] for x in sorted_hrs], ['C', 'B', 'A'])
+
+        # Sort by name
+        sorted_name = manage_schedule.sort_summary_items(items, sort_by="name")
+        self.assertEqual([x['key'] for x in sorted_name], ['A', 'B', 'C'])
+
+    def test_build_summary_table_data_and_format(self):
+        sessions = [
+            {
+                'course_id': '1', 'title': 'Course 1', 'start_date': '2026-09-20 10:00:00',
+                'instructor': 'Alice', 'host': 'Bob', 'assistants': 'Charlie', 'hours': '3'
+            }
+        ]
+        summary = manage_schedule.compute_role_summary(sessions)
+        header, rows, totals_row, unassigned_row = manage_schedule.build_summary_table_data(summary)
+
+        self.assertEqual(header, ['Key', 'Full Name', 'Institution', 'Instructor', 'Host', 'Assistants', 'Total Events', 'Total Hours'])
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(totals_row[0], 'TOTALS')
+        self.assertEqual(unassigned_row[0], 'UNASSIGNED')
+
+        # Test text table formatting
+        text_table = manage_schedule.format_summary_text_table(header, rows, totals_row, unassigned_row, title="Test Table")
+        self.assertIn("Test Table", text_table)
+        self.assertIn("Alice", text_table)
+        self.assertIn("TOTALS", text_table)
+
+        # Test CSV formatting
+        csv_text = manage_schedule.format_summary_csv(header, rows, totals_row, unassigned_row)
+        self.assertIn("Key,Full Name,Institution,Instructor,Host,Assistants,Total Events,Total Hours", csv_text)
+        self.assertIn("Alice", csv_text)
+        self.assertIn("TOTALS", csv_text)
+
+
 if __name__ == '__main__':
     unittest.main()
