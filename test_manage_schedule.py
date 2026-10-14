@@ -343,5 +343,212 @@ class TestManageSchedule(unittest.TestCase):
         self.assertIn("TOTALS", csv_text)
 
 
+class TestCheckConflicts(unittest.TestCase):
+    """Tests for the check-conflicts helpers."""
+
+    # ------------------------------------------------------------------
+    # intervals_overlap
+    # ------------------------------------------------------------------
+    def test_intervals_overlap_no_overlap(self):
+        from datetime import datetime
+        s1 = datetime(2026, 9, 21, 9, 0)
+        e1 = datetime(2026, 9, 21, 11, 0)
+        s2 = datetime(2026, 9, 21, 12, 0)
+        e2 = datetime(2026, 9, 21, 14, 0)
+        self.assertFalse(manage_schedule.intervals_overlap(s1, e1, s2, e2))
+        self.assertFalse(manage_schedule.intervals_overlap(s2, e2, s1, e1))
+
+    def test_intervals_overlap_adjacent(self):
+        from datetime import datetime
+        s1 = datetime(2026, 9, 21, 9, 0)
+        e1 = datetime(2026, 9, 21, 12, 0)
+        s2 = datetime(2026, 9, 21, 12, 0)  # touching at boundary → NOT overlapping
+        e2 = datetime(2026, 9, 21, 14, 0)
+        self.assertFalse(manage_schedule.intervals_overlap(s1, e1, s2, e2))
+
+    def test_intervals_overlap_overlapping(self):
+        from datetime import datetime
+        s1 = datetime(2026, 9, 21, 9, 0)
+        e1 = datetime(2026, 9, 21, 13, 0)
+        s2 = datetime(2026, 9, 21, 12, 0)
+        e2 = datetime(2026, 9, 21, 14, 0)
+        self.assertTrue(manage_schedule.intervals_overlap(s1, e1, s2, e2))
+        self.assertTrue(manage_schedule.intervals_overlap(s2, e2, s1, e1))
+
+    def test_intervals_overlap_contained(self):
+        from datetime import datetime
+        outer_s = datetime(2026, 9, 21, 9, 0)
+        outer_e = datetime(2026, 9, 21, 17, 0)
+        inner_s = datetime(2026, 9, 21, 11, 0)
+        inner_e = datetime(2026, 9, 21, 13, 0)
+        self.assertTrue(manage_schedule.intervals_overlap(outer_s, outer_e, inner_s, inner_e))
+        self.assertTrue(manage_schedule.intervals_overlap(inner_s, inner_e, outer_s, outer_e))
+
+    # ------------------------------------------------------------------
+    # collect_session_assignments
+    # ------------------------------------------------------------------
+    def _make_session(self, course_id='1', title='Test', start='2026-09-21 09:00:00',
+                      end='2026-09-21 11:00:00', instructor='alice', host='bob',
+                      assistants='carol', hours='2'):
+        return {
+            'course_id': course_id, 'title': title,
+            'start_date': start, 'end_date': end,
+            'instructor': instructor, 'host': host, 'assistants': assistants,
+            'hours': hours,
+        }
+
+    def test_collect_session_assignments_basic(self):
+        sessions = [self._make_session()]
+        result = manage_schedule.collect_session_assignments(sessions)
+        keys = [(a['trainer_key'], a['role']) for a in result]
+        self.assertIn(('alice', 'instructor'), keys)
+        self.assertIn(('bob', 'host'), keys)
+        self.assertIn(('carol', 'assistants'), keys)
+
+    def test_collect_session_assignments_multiple_assistants(self):
+        sessions = [self._make_session(assistants='carol, dave')]
+        result = manage_schedule.collect_session_assignments(sessions)
+        asst_keys = [a['trainer_key'] for a in result if a['role'] == 'assistants']
+        self.assertIn('carol', asst_keys)
+        self.assertIn('dave', asst_keys)
+
+    def test_collect_session_assignments_skips_blank(self):
+        sessions = [{'course_id': '', 'title': '', 'start_date': '', 'end_date': ''}]
+        result = manage_schedule.collect_session_assignments(sessions)
+        self.assertEqual(result, [])
+
+    def test_collect_session_assignments_skips_no_dates(self):
+        sessions = [{'course_id': '1', 'title': 'X', 'start_date': '', 'end_date': ''}]
+        result = manage_schedule.collect_session_assignments(sessions)
+        self.assertEqual(result, [])
+
+    def test_collect_session_assignments_custom_roles(self):
+        sessions = [self._make_session()]
+        result = manage_schedule.collect_session_assignments(sessions, roles=['instructor'])
+        self.assertEqual([a['role'] for a in result], ['instructor'])
+
+    # ------------------------------------------------------------------
+    # resolve_trainer_emails  (no trainers DB → falls back gracefully)
+    # ------------------------------------------------------------------
+    def test_resolve_trainer_emails_no_trainers(self):
+        assignments = [{'trainer_key': 'alice', 'course_id': '1', 'title': 'T',
+                        'start_date': '2026-09-21 09:00:00', 'end_date': '2026-09-21 11:00:00',
+                        'hours': '2', 'role': 'instructor'}]
+        enriched, email_map = manage_schedule.resolve_trainer_emails(assignments, trainers=None)
+        self.assertEqual(len(enriched), 1)
+        self.assertEqual(enriched[0]['calendar_email'], '')
+        self.assertEqual(email_map, {})
+
+    # ------------------------------------------------------------------
+    # detect_conflicts
+    # ------------------------------------------------------------------
+    def _make_aware(self, dt_str):
+        import pytz
+        tz = pytz.timezone('America/Toronto')
+        dt = datetime.strptime(dt_str, '%Y-%m-%d %H:%M:%S')
+        return tz.localize(dt)
+
+    def _assignment(self, start='2026-09-21 09:00:00', end='2026-09-21 11:00:00', email='a@example.com'):
+        return {
+            'course_id': '1', 'title': 'Test', 'role': 'instructor',
+            'trainer_key': 'alice', 'fullname': 'Alice', 'institution': 'U',
+            'calendar_email': email, 'hours': '2',
+            'start_date': start, 'end_date': end,
+        }
+
+    def test_detect_conflicts_no_busy(self):
+        assignment = self._assignment()
+        # Build freebusy results: trainer is free
+        import pytz
+        utc = pytz.utc
+        tz = pytz.timezone('America/Toronto')
+        start_aware = tz.localize(datetime(2026, 9, 21, 9, 0, 0)).astimezone(utc)
+        end_aware = tz.localize(datetime(2026, 9, 21, 11, 0, 0)).astimezone(utc)
+        time_min = start_aware.isoformat()
+        time_max = end_aware.isoformat()
+        freebusy = {(time_min, time_max): {'a@example.com': {'busy': []}}}
+        conflicts, inaccessible = manage_schedule.detect_conflicts(
+            [assignment], freebusy, 'America/Toronto'
+        )
+        self.assertEqual(conflicts, [])
+        self.assertEqual(inaccessible, [])
+
+    def test_detect_conflicts_with_overlap(self):
+        assignment = self._assignment()
+        import pytz
+        utc = pytz.utc
+        tz = pytz.timezone('America/Toronto')
+        start_aware = tz.localize(datetime(2026, 9, 21, 9, 0, 0)).astimezone(utc)
+        end_aware = tz.localize(datetime(2026, 9, 21, 11, 0, 0)).astimezone(utc)
+        time_min = start_aware.isoformat()
+        time_max = end_aware.isoformat()
+        # Trainer has a busy slot that overlaps
+        busy_start = tz.localize(datetime(2026, 9, 21, 10, 0, 0)).astimezone(utc).isoformat()
+        busy_end = tz.localize(datetime(2026, 9, 21, 12, 0, 0)).astimezone(utc).isoformat()
+        freebusy = {(time_min, time_max): {'a@example.com': {'busy': [
+            {'start': busy_start, 'end': busy_end}
+        ]}}}
+        conflicts, inaccessible = manage_schedule.detect_conflicts(
+            [assignment], freebusy, 'America/Toronto'
+        )
+        self.assertEqual(len(conflicts), 1)
+        self.assertEqual(conflicts[0]['trainer_key'], 'alice')
+        self.assertEqual(inaccessible, [])
+
+    def test_detect_conflicts_inaccessible_calendar(self):
+        assignment = self._assignment()
+        import pytz
+        utc = pytz.utc
+        tz = pytz.timezone('America/Toronto')
+        start_aware = tz.localize(datetime(2026, 9, 21, 9, 0, 0)).astimezone(utc)
+        end_aware = tz.localize(datetime(2026, 9, 21, 11, 0, 0)).astimezone(utc)
+        time_min = start_aware.isoformat()
+        time_max = end_aware.isoformat()
+        freebusy = {(time_min, time_max): {'a@example.com': {
+            'errors': [{'domain': 'calendar', 'reason': 'notFound'}]
+        }}}
+        conflicts, inaccessible = manage_schedule.detect_conflicts(
+            [assignment], freebusy, 'America/Toronto'
+        )
+        self.assertEqual(conflicts, [])
+        self.assertEqual(len(inaccessible), 1)
+        self.assertEqual(inaccessible[0]['trainer_key'], 'alice')
+
+    def test_detect_conflicts_no_email_skipped(self):
+        assignment = self._assignment(email='')
+        freebusy = {}
+        conflicts, inaccessible = manage_schedule.detect_conflicts(
+            [assignment], freebusy, 'America/Toronto'
+        )
+        self.assertEqual(conflicts, [])
+        self.assertEqual(inaccessible, [])
+
+    # ------------------------------------------------------------------
+    # format_conflicts_text_table and format_conflicts_csv
+    # ------------------------------------------------------------------
+    def test_format_conflicts_text_table_no_conflicts(self):
+        text = manage_schedule.format_conflicts_text_table([], [], 'America/Toronto')
+        self.assertIn("No scheduling conflicts found", text)
+
+    def test_format_conflicts_text_table_with_conflict(self):
+        conflict = {
+            'course_id': '1', 'title': 'Test', 'role': 'instructor',
+            'trainer_key': 'alice', 'fullname': 'Alice Smith', 'institution': 'U',
+            'calendar_email': 'a@example.com', 'hours': '2',
+            'start_date': '2026-09-21 09:00:00', 'end_date': '2026-09-21 11:00:00',
+            'busy_start': '2026-09-21 10:00', 'busy_end': '2026-09-21 12:00',
+            'status': 'conflict',
+        }
+        text = manage_schedule.format_conflicts_text_table([conflict], [], 'America/Toronto')
+        self.assertIn("Alice Smith", text)
+        self.assertIn("CONFLICTS", text)
+
+    def test_format_conflicts_csv_headers(self):
+        csv_text = manage_schedule.format_conflicts_csv([], [])
+        self.assertIn("Status", csv_text)
+        self.assertIn("Trainer Name", csv_text)
+        self.assertIn("Busy Start", csv_text)
+
+
 if __name__ == '__main__':
     unittest.main()

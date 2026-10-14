@@ -12,7 +12,7 @@ from googleapiclient.errors import HttpError
 
 class GCalInterface(GoogleInterface):
     def __init__(self, key_file, calendar_id, timezone = "America/Montreal", credentials_type='user'):
-        super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events'])
+        super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.events.freebusy'])
         self.logger = logging.getLogger(__name__)
         self.calendar_id = calendar_id
         self.timezone = timezone
@@ -192,6 +192,34 @@ class GCalInterface(GoogleInterface):
             self.logger.info(f"Event deleted: {event_id}")
         except HttpError as error:
             self.logger.error('An error occurred: %s' % error)
+
+
+    def get_freebusy(self, time_min, time_max, emails):
+        """
+        Query the FreeBusy API for one or more calendar email addresses.
+
+        Args:
+            time_min: ISO 8601 string for the start of the query range (UTC or with offset).
+            time_max: ISO 8601 string for the end of the query range (UTC or with offset).
+            emails: list of calendar email addresses to query.
+
+        Returns:
+            dict mapping email -> {'busy': [{'start':..., 'end':...}], 'errors': [...]}
+            as returned by the Google Calendar FreeBusy API.
+        """
+        # documentation: https://developers.google.com/calendar/api/v3/reference/freebusy/query
+        body = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "items": [{"id": email} for email in emails],
+            "timeZone": "UTC",
+        }
+        try:
+            result = self.get_service().freebusy().query(body=body).execute()
+            return result.get('calendars', {})
+        except HttpError as error:
+            self.logger.error('FreeBusy query error: %s' % error)
+            raise error
 
 
 def main():

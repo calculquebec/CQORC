@@ -1417,6 +1417,433 @@ def action_summary(args, global_config):
                 print(f"Error writing summary to Google Sheet: {e}")
 
 
+
+# ---------------------------------------------------------------------------
+# Check Conflicts Helpers and Action
+# ---------------------------------------------------------------------------
+
+def _parse_iso_to_aware(iso_str, fallback_tz=None):
+    """
+    Parse an ISO 8601 datetime string returned by Google APIs to a
+    timezone-aware datetime object.  If the string has no offset the
+    fallback_tz (a pytz timezone) is used.
+    """
+    try:
+        dt = datetime.fromisoformat(iso_str)
+    except Exception:
+        return None
+    if dt.tzinfo is None and fallback_tz is not None:
+        dt = fallback_tz.localize(dt)
+    return dt
+
+
+def intervals_overlap(start1, end1, start2, end2):
+    """Return True when two half-open time intervals [start1, end1) and [start2, end2) overlap."""
+    return start1 < end2 and start2 < end1
+
+
+def collect_session_assignments(sessions, roles=None):
+    """
+    Extract trainer assignments from sessions.
+
+    Returns a list of dicts:
+        {
+            'course_id': str,
+            'title': str,
+            'start_date': str,       # raw value from sheet
+            'end_date': str,
+            'hours': str,
+            'role': str,
+            'trainer_key': str,
+        }
+    Only sessions that have both start_date and end_date are included.
+    """
+    if roles is None:
+        roles = ['instructor', 'host', 'assistants']
+    assignments = []
+    for s in sessions:
+        cid = (s.get('course_id') or '').strip()
+        title = (s.get('title') or '').strip()
+        start_date = (s.get('start_date') or '').strip()
+        end_date = (s.get('end_date') or '').strip()
+
+        if not cid and not title and not start_date:
+            continue  # blank placeholder row
+        if not start_date or not end_date:
+            continue  # can't check conflicts without dates
+
+        for role in roles:
+            val = s.get(role) or ''
+            for tk in [p.strip() for p in val.split(',') if p.strip()]:
+                assignments.append({
+                    'course_id': cid,
+                    'title': title,
+                    'start_date': start_date,
+                    'end_date': end_date,
+                    'hours': (s.get('hours') or '').strip(),
+                    'role': role,
+                    'trainer_key': tk,
+                })
+    return assignments
+
+
+def resolve_trainer_emails(assignments, trainers, verbose=False):
+    """
+    Enrich assignments with trainer fullname and calendar_email.
+    Returns (enriched_assignments, email_to_key_map) where:
+        enriched_assignments: list of assignment dicts with 'fullname' and 'calendar_email' added
+        email_to_key_map: dict {email: trainer_key}  (first key wins on collision)
+    """
+    enriched = []
+    email_to_key = {}
+    for a in assignments:
+        tk = a['trainer_key']
+        fullname, inst = get_trainer_info(trainers, tk)
+        cal_email = ''
+        if trainers:
+            # Try exact match first, then case-insensitive
+            resolved_key = None
+            try:
+                _ = trainers.fullname(tk)
+                resolved_key = tk
+            except Exception:
+                pass
+            if not resolved_key:
+                try:
+                    for k in trainers.trainers():
+                        if k.lower() == tk.lower():
+                            resolved_key = k
+                            break
+                except Exception:
+                    pass
+            if resolved_key:
+                try:
+                    cal_email = trainers.calendar_email(resolved_key)
+                except Exception:
+                    pass
+        if not cal_email:
+            if verbose:
+                print(f"  Warning: no calendar email for trainer '{tk}', skipping conflict check for this trainer.")
+        else:
+            email_to_key.setdefault(cal_email, tk)
+        enriched.append({**a, 'fullname': fullname, 'institution': inst, 'calendar_email': cal_email})
+    return enriched, email_to_key
+
+
+def query_freebusy_batched(gcal, assignments_with_email, tz_name, verbose=False):
+    """
+    Query FreeBusy API for all unique (session time window, email) combinations.
+    Groups queries by overlapping time windows to reduce API calls.
+
+    Returns:
+        dict mapping (time_min_iso, time_max_iso) -> {email: {'busy': [...], 'errors': [...]}}
+    """
+    from collections import defaultdict
+
+    tz = pytz.timezone(tz_name)
+
+    # Group emails by their (start, end) window
+    window_emails = defaultdict(set)
+    for a in assignments_with_email:
+        if not a['calendar_email']:
+            continue
+        try:
+            start_dt = parse_datetime(a['start_date'])
+            end_dt = parse_datetime(a['end_date'])
+        except Exception:
+            continue
+        if not start_dt or not end_dt:
+            continue
+        # Localise and convert to UTC ISO
+        start_aware = tz.localize(start_dt) if start_dt.tzinfo is None else start_dt
+        end_aware = tz.localize(end_dt) if end_dt.tzinfo is None else end_dt
+        time_min = start_aware.astimezone(pytz.utc).isoformat()
+        time_max = end_aware.astimezone(pytz.utc).isoformat()
+        window_emails[(time_min, time_max)].add(a['calendar_email'])
+
+    BATCH_SIZE = 50  # Google FreeBusy supports up to ~50 items per query
+    results = {}
+    for (time_min, time_max), emails in window_emails.items():
+        emails_list = sorted(emails)
+        for i in range(0, len(emails_list), BATCH_SIZE):
+            batch = emails_list[i:i + BATCH_SIZE]
+            try:
+                cal_data = gcal.get_freebusy(time_min, time_max, batch)
+                if (time_min, time_max) not in results:
+                    results[(time_min, time_max)] = {}
+                results[(time_min, time_max)].update(cal_data)
+                if verbose:
+                    print(f"  FreeBusy queried for {len(batch)} calendar(s) in window {time_min} — {time_max}")
+            except Exception as e:
+                if verbose:
+                    print(f"  Warning: FreeBusy query failed for window {time_min}—{time_max}: {e}")
+    return results
+
+
+def detect_conflicts(assignments_with_email, freebusy_results, tz_name):
+    """
+    Cross-reference trainer assignments against FreeBusy results.
+
+    Returns a list of conflict dicts:
+        {
+            'course_id', 'title', 'start_date', 'end_date', 'hours',
+            'role', 'trainer_key', 'fullname', 'institution', 'calendar_email',
+            'busy_start', 'busy_end',   # strings from FreeBusy API
+            'status',  # 'conflict' | 'inaccessible' | 'ok'
+        }
+    """
+    tz = pytz.timezone(tz_name)
+    utc = pytz.utc
+    conflicts = []
+    inaccessible = []
+
+    for a in assignments_with_email:
+        email = a.get('calendar_email', '')
+        if not email:
+            continue  # already warned at resolution stage
+
+        try:
+            start_dt = parse_datetime(a['start_date'])
+            end_dt = parse_datetime(a['end_date'])
+        except Exception:
+            continue
+        if not start_dt or not end_dt:
+            continue
+
+        start_aware = tz.localize(start_dt) if start_dt.tzinfo is None else start_dt.astimezone(tz)
+        end_aware = tz.localize(end_dt) if end_dt.tzinfo is None else end_dt.astimezone(tz)
+        time_min = start_aware.astimezone(utc).isoformat()
+        time_max = end_aware.astimezone(utc).isoformat()
+
+        cal_info = freebusy_results.get((time_min, time_max), {}).get(email)
+        if cal_info is None:
+            # No result at all for this email/window — query may have failed
+            continue
+
+        errors = cal_info.get('errors', [])
+        if errors:
+            inaccessible.append({
+                **a,
+                'status': 'inaccessible',
+                'busy_start': '',
+                'busy_end': '',
+                'errors': errors,
+            })
+            continue
+
+        busy_intervals = cal_info.get('busy', [])
+        found_conflict = False
+        for interval in busy_intervals:
+            b_start = _parse_iso_to_aware(interval.get('start', ''), utc)
+            b_end = _parse_iso_to_aware(interval.get('end', ''), utc)
+            if b_start is None or b_end is None:
+                continue
+            if intervals_overlap(start_aware.astimezone(utc), end_aware.astimezone(utc), b_start, b_end):
+                conflicts.append({
+                    **a,
+                    'status': 'conflict',
+                    'busy_start': b_start.astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                    'busy_end': b_end.astimezone(tz).strftime('%Y-%m-%d %H:%M'),
+                })
+                found_conflict = True
+                # Report all overlapping intervals (a trainer could have multiple conflicts)
+
+    return conflicts, inaccessible
+
+
+def format_conflicts_text_table(conflicts, inaccessible, tz_name):
+    """
+    Formats conflict and inaccessible-calendar results as a human-readable ASCII table.
+    """
+    lines = []
+
+    if conflicts:
+        header = ['Date', 'Course', 'Title', 'Role', 'Trainer', 'Session Time', 'Busy Interval']
+        rows = []
+        for c in conflicts:
+            try:
+                start_dt = parse_datetime(c['start_date'])
+                end_dt = parse_datetime(c['end_date'])
+                session_time = f"{start_dt.strftime('%H:%M')} – {end_dt.strftime('%H:%M')}" if start_dt and end_dt else ''
+                date_str = start_dt.strftime('%Y-%m-%d') if start_dt else c['start_date']
+            except Exception:
+                session_time = f"{c['start_date']} – {c['end_date']}"
+                date_str = c['start_date']
+            rows.append([
+                date_str,
+                c['course_id'],
+                (c['title'] or '')[:40],
+                c['role'],
+                c['fullname'] or c['trainer_key'],
+                session_time,
+                f"{c['busy_start']} – {c['busy_end']}",
+            ])
+
+        all_rows = [header] + rows
+        col_widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(header))]
+        fmt = '  '.join(f'{{:<{w}}}' for w in col_widths)
+        sep = '  '.join('-' * w for w in col_widths)
+        total_width = sum(col_widths) + 2 * (len(col_widths) - 1)
+
+        title = f"⚠  SCHEDULING CONFLICTS ({len(conflicts)} found)"
+        lines.append(title)
+        lines.append('=' * max(len(title), total_width))
+        lines.append(fmt.format(*header))
+        lines.append(sep)
+        for r in rows:
+            lines.append(fmt.format(*r))
+        lines.append('=' * max(len(title), total_width))
+    else:
+        lines.append("No scheduling conflicts found.")
+
+    if inaccessible:
+        lines.append('')
+        lines.append(f"Calendars inaccessible (no free/busy data): {len(inaccessible)}")
+        seen = set()
+        for c in inaccessible:
+            key = (c['trainer_key'], c['calendar_email'])
+            if key not in seen:
+                seen.add(key)
+                err_msg = '; '.join(e.get('reason', str(e)) for e in c.get('errors', []))
+                lines.append(f"  {c['fullname'] or c['trainer_key']} <{c['calendar_email']}>: {err_msg}")
+
+    return '\n'.join(lines)
+
+
+def format_conflicts_csv(conflicts, inaccessible):
+    """
+    Formats conflict and inaccessible-calendar results as CSV.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Status', 'Date', 'Course ID', 'Title', 'Role', 'Trainer Key',
+                     'Trainer Name', 'Institution', 'Calendar Email',
+                     'Session Start', 'Session End', 'Busy Start', 'Busy End'])
+    for c in conflicts:
+        writer.writerow([
+            'conflict',
+            c['start_date'].split(' ')[0] if c['start_date'] else '',
+            c['course_id'],
+            c['title'],
+            c['role'],
+            c['trainer_key'],
+            c['fullname'] or c['trainer_key'],
+            c.get('institution', ''),
+            c['calendar_email'],
+            c['start_date'],
+            c['end_date'],
+            c['busy_start'],
+            c['busy_end'],
+        ])
+    for c in inaccessible:
+        err_msg = '; '.join(e.get('reason', str(e)) for e in c.get('errors', []))
+        writer.writerow([
+            'inaccessible',
+            c['start_date'].split(' ')[0] if c['start_date'] else '',
+            c['course_id'],
+            c['title'],
+            c['role'],
+            c['trainer_key'],
+            c['fullname'] or c['trainer_key'],
+            c.get('institution', ''),
+            c['calendar_email'],
+            c['start_date'],
+            c['end_date'],
+            '',
+            '',
+        ])
+    return output.getvalue()
+
+
+def action_check_conflicts(args, global_config):
+    """
+    Action: fetch trainer free/busy data from Google Calendar, compare against
+    session assignments, and report potential scheduling conflicts.
+    """
+    sheet_name = (
+        getattr(args, 'sheet', None)
+        or global_config['google'].get('calendar_sheet_name')
+    )
+    if not sheet_name:
+        print("Error: --sheet must be specified (or google.calendar_sheet_name set in config).")
+        sys.exit(1)
+
+    roles_arg = getattr(args, 'roles', 'instructor,host,assistants')
+    roles = [r.strip().lower() for r in roles_arg.split(',') if r.strip()]
+    csv_arg = getattr(args, 'csv', None)
+    quiet = (csv_arg == '-')
+    verbose = getattr(args, 'verbose', False)
+
+    if not quiet:
+        print(f"Action: check-conflicts (Sheet: '{sheet_name}', Roles: {', '.join(roles)})")
+
+    # Load sheet sessions
+    try:
+        calendar = CQORCcalendar.Calendar(global_config, args, sheet_name=sheet_name)
+    except Exception as e:
+        print(f"Error loading sheet '{sheet_name}': {e}")
+        sys.exit(1)
+
+    sessions = calendar.get_all_sessions()
+    if not quiet:
+        print(f"Loaded {len(sessions)} session rows from sheet '{sheet_name}'.")
+
+    # Load trainers DB for calendar email lookup
+    trainers = load_trainers(global_config, args)
+    if not trainers and not quiet:
+        print("Warning: trainers database not found; trainer name/email resolution will be limited.")
+
+    # Collect assignments
+    assignments = collect_session_assignments(sessions, roles=roles)
+    if not quiet:
+        print(f"Found {len(assignments)} trainer-role assignments to check.")
+
+    if not assignments:
+        print("No assignments found to check for conflicts.")
+        return
+
+    # Enrich with calendar emails
+    assignments_with_email, _ = resolve_trainer_emails(assignments, trainers, verbose=verbose)
+
+    checkable = [a for a in assignments_with_email if a['calendar_email']]
+    if not quiet:
+        no_email = len(assignments_with_email) - len(checkable)
+        if no_email:
+            print(f"  {no_email} assignment(s) have no calendar email and will be skipped.")
+        print(f"  Querying FreeBusy data for {len(checkable)} assignment(s) across "
+              f"{len({a['calendar_email'] for a in checkable})} unique trainer calendar(s)...")
+
+    # Init Google Calendar interface
+    gcal, tz_name = init_gcal(global_config, args)
+
+    # Query FreeBusy API (batched)
+    freebusy_results = query_freebusy_batched(gcal, checkable, tz_name, verbose=verbose)
+
+    # Detect conflicts
+    conflicts, inaccessible = detect_conflicts(assignments_with_email, freebusy_results, tz_name)
+
+    # Output
+    if quiet:
+        sys.stdout.write(format_conflicts_csv(conflicts, inaccessible))
+    else:
+        print()
+        print(format_conflicts_text_table(conflicts, inaccessible, tz_name))
+
+        if csv_arg:
+            csv_text = format_conflicts_csv(conflicts, inaccessible)
+            try:
+                with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
+                    f.write(csv_text)
+                print(f"\nConflict report exported to '{csv_arg}'.")
+            except Exception as e:
+                print(f"\nError writing CSV file '{csv_arg}': {e}")
+
+        print(f"\nSummary for check-conflicts:")
+        print(f"  Assignments checked: {len(checkable)}")
+        print(f"  Conflicts found:     {len(conflicts)}")
+        print(f"  Inaccessible calendars: {len({c['calendar_email'] for c in inaccessible})}")
+
+
 # ---------------------------------------------------------------------------
 # CLI Entry Point
 # ---------------------------------------------------------------------------
@@ -1427,8 +1854,8 @@ def main():
     # Global options / Top-level fallback flags
     parser.add_argument(
         "--action",
-        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar", "summary", "role-summary", "roles-summary"],
-        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar, summary)"
+        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar", "summary", "role-summary", "roles-summary", "check-conflicts"],
+        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar, summary, check-conflicts)"
     )
     parser.add_argument(
         "--sheet",
@@ -1579,6 +2006,18 @@ def main():
     p_summary.add_argument("--config_dir", default=".", help="Config dir")
     p_summary.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
 
+    # Subcommand: check-conflicts
+    p_conflicts = subparsers.add_parser(
+        "check-conflicts",
+        help="Fetch trainer free/busy data from Google Calendar and report scheduling conflicts"
+    )
+    p_conflicts.add_argument("--sheet", default=None, help="Sheet name (default: calendar_sheet_name in config)")
+    p_conflicts.add_argument("--roles", default="instructor,host,assistants", help="Comma-separated roles to check (default: instructor,host,assistants)")
+    p_conflicts.add_argument("--csv", default=None, help="Export conflict report to CSV file (or '-' for stdout)")
+    p_conflicts.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output")
+    p_conflicts.add_argument("--config_dir", default=".", help="Config dir")
+    p_conflicts.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
+
     args = parser.parse_args()
 
     # Determine action
@@ -1609,6 +2048,8 @@ def main():
         action_clear_calendar(args, global_config)
     elif action in ("summary", "role-summary", "roles-summary"):
         action_summary(args, global_config)
+    elif action == "check-conflicts":
+        action_check_conflicts(args, global_config)
     else:
         print(f"Unknown action: {action}")
         sys.exit(1)
