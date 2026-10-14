@@ -180,6 +180,109 @@ class GSheetsInterface(GoogleInterface):
             self.logger.info(f"No changes needed in protected ranges")
 
 
+    def get_sheet_titles(self, spreadsheet_id):
+        metadata = self.get_spreadsheet_metadata(spreadsheet_id)
+        if isinstance(metadata, Exception):
+            raise metadata
+        return [s['properties']['title'] for s in metadata.get('sheets', [])]
+
+
+    def sheet_exists(self, spreadsheet_id, sheet_title):
+        return sheet_title in self.get_sheet_titles(spreadsheet_id)
+
+
+    def add_sheet(self, spreadsheet_id, title):
+        try:
+            body = {
+                "requests": [
+                    {
+                        "addSheet": {
+                            "properties": {
+                                "title": title,
+                                "gridProperties": {
+                                    "frozenRowCount": 1
+                                }
+                            }
+                        }
+                    }
+                ]
+            }
+            result = (
+                self.get_service().spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body=body
+                )
+                .execute()
+            )
+            self.logger.info(f"Added sheet '{title}' to {spreadsheet_id}")
+            return result
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            raise error
+
+
+    def duplicate_sheet(self, spreadsheet_id, source_sheet_title, new_sheet_title):
+        try:
+            metadata = self.get_spreadsheet_metadata(spreadsheet_id)
+            if isinstance(metadata, Exception):
+                raise metadata
+            source_sheet_id = None
+            for s in metadata.get('sheets', []):
+                if s['properties']['title'] == source_sheet_title:
+                    source_sheet_id = s['properties']['sheetId']
+                    break
+            if source_sheet_id is None:
+                raise ValueError(f"Source sheet '{source_sheet_title}' not found in spreadsheet.")
+
+            body = {
+                "requests": [
+                    {
+                        "duplicateSheet": {
+                            "sourceSheetId": source_sheet_id,
+                            "insertSheetIndex": 0,
+                            "newSheetName": new_sheet_title
+                        }
+                    }
+                ]
+            }
+            result = (
+                self.get_service().spreadsheets()
+                .batchUpdate(
+                    spreadsheetId=spreadsheet_id,
+                    body=body
+                )
+                .execute()
+            )
+            self.logger.info(f"Duplicated sheet '{source_sheet_title}' as '{new_sheet_title}' in {spreadsheet_id}")
+            return result
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            raise error
+
+
+    def clear_values(self, spreadsheet_id, range_name, sheet_name=None):
+        try:
+            if sheet_name:
+                range_name = f"'{sheet_name}'!{range_name}"
+            result = (
+                self.get_service().spreadsheets()
+                .values()
+                .clear(
+                    spreadsheetId=spreadsheet_id,
+                    range=range_name,
+                    body={}
+                )
+                .execute()
+            )
+            self.logger.info(f"Cleared values in range '{range_name}'")
+            return result
+        except HttpError as error:
+            self.logger.error(f"An error occurred: {error}")
+            raise error
+
+
+
 
 def main():
     import configparser
