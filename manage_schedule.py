@@ -828,8 +828,8 @@ def get_trainer_info(trainers, key):
 
     # Exact match
     try:
-        fn = trainers.fullname(key)
-        inst = trainers.home_institution(key)
+        fn = trainers.fullname(key).strip()
+        inst = trainers.home_institution(key).strip()
         return fn, inst
     except (KeyError, Exception):
         pass
@@ -838,7 +838,7 @@ def get_trainer_info(trainers, key):
     try:
         for k in trainers.trainers():
             if k.lower() == key.lower():
-                return trainers.fullname(k), trainers.home_institution(k)
+                return trainers.fullname(k).strip(), trainers.home_institution(k).strip()
     except Exception:
         pass
 
@@ -931,14 +931,48 @@ def compute_role_summary(sessions, roles=None, trainers=None):
     }
 
 
-def sort_summary_items(person_stats_list, sort_by="total", roles=None):
+# Valid sort keys (role names are added dynamically when validating)
+SORT_BY_STATIC_KEYS = ["total", "hours", "name", "key", "institution"]
+
+
+def get_valid_sort_keys(roles):
+    """Return all valid --sort-by values given the active role list."""
+    return SORT_BY_STATIC_KEYS + list(roles)
+
+
+def validate_sort_by(sort_by, roles):
+    """
+    Validate the --sort-by argument. Exits with a helpful message on failure.
+    Returns the normalised (lower-cased) sort key.
+    """
+    sort_by_norm = (sort_by or "total").lower()
+    valid = get_valid_sort_keys(roles)
+    if sort_by_norm not in valid:
+        print(
+            f"Error: invalid --sort-by value '{sort_by}'.\n"
+            f"Valid options are: {', '.join(valid)}"
+        )
+        sys.exit(1)
+    return sort_by_norm
+
+
+def sort_summary_items(person_stats_list, sort_by="total", roles=None, by_hours=False):
     """
     Sorts a list of person_stats dicts according to sort_by criterion.
+
+    When by_hours=True the primary numeric key for role-based and 'total'
+    sorts switches from event count to hours so the display order matches
+    the metric being shown.
     """
     sort_by = (sort_by or "total").lower()
     roles = roles or ['instructor', 'host', 'assistants']
 
     if sort_by in roles:
+        if by_hours:
+            return sorted(
+                person_stats_list,
+                key=lambda x: (-x['hours_by_role'].get(sort_by, 0.0), -x['total_hours'], x['fullname'].lower())
+            )
         return sorted(
             person_stats_list,
             key=lambda x: (-x['roles'].get(sort_by, 0), -x['total_events'], x['fullname'].lower())
@@ -953,12 +987,26 @@ def sort_summary_items(person_stats_list, sort_by="total", roles=None):
             person_stats_list,
             key=lambda x: (x['fullname'].lower(), x['key'].lower())
         )
-    elif sort_by in ("key",):
+    elif sort_by == "key":
         return sorted(
             person_stats_list,
-            key=lambda x: (x['key'].lower())
+            key=lambda x: x['key'].lower()
+        )
+    elif sort_by == "institution":
+        return sorted(
+            person_stats_list,
+            key=lambda x: (
+                x['institution'].lower(),
+                -(x['total_hours'] if by_hours else x['total_events']),
+                x['fullname'].lower()
+            )
         )
     else:  # default "total"
+        if by_hours:
+            return sorted(
+                person_stats_list,
+                key=lambda x: (-x['total_hours'], -x['total_events'], x['fullname'].lower())
+            )
         return sorted(
             person_stats_list,
             key=lambda x: (-x['total_events'], -x['total_hours'], x['fullname'].lower())
@@ -975,7 +1023,7 @@ def build_summary_table_data(summary_data, sort_by="total", by_hours=False):
     unassigned = summary_data['unassigned']
 
     grand_total_hours = sum(item['total_hours'] for item in person_stats.values())
-    sorted_stats = sort_summary_items(list(person_stats.values()), sort_by=sort_by, roles=roles)
+    sorted_stats = sort_summary_items(list(person_stats.values()), sort_by=sort_by, roles=roles, by_hours=by_hours)
 
     if by_hours:
         role_headers = [f"{r.capitalize()} (hrs)" for r in roles]
@@ -1028,6 +1076,158 @@ def build_summary_table_data(summary_data, sort_by="total", by_hours=False):
         unassigned_row.append('')
 
     return header, rows, totals_row, unassigned_row
+
+
+# ---------------------------------------------------------------------------
+# Institution Grouping
+# ---------------------------------------------------------------------------
+
+def build_institution_map(summary_data):
+    """
+    Groups person_stats by institution.
+    Returns a dict: institution -> {'people': [...], 'hours_by_role': {...},
+    'total_hours': float, 'total_events': int}, ordered by descending total
+    hours then alphabetically by institution name.
+    """
+    roles = summary_data['roles']
+    person_stats = summary_data['person_stats']
+
+    raw = {}
+    for p in person_stats.values():
+        inst = (p.get('institution') or 'Unspecified').strip() or 'Unspecified'
+        if inst not in raw:
+            raw[inst] = {
+                'institution': inst,
+                'people': [],
+                'hours_by_role': {r: 0.0 for r in roles},
+                'total_hours': 0.0,
+                'total_events': 0,
+            }
+        raw[inst]['people'].append(p)
+        raw[inst]['total_hours'] += p['total_hours']
+        raw[inst]['total_events'] += p['total_events']
+        for r in roles:
+            raw[inst]['hours_by_role'][r] += p['hours_by_role'].get(r, 0.0)
+
+    return dict(
+        sorted(raw.items(), key=lambda kv: (-kv[1]['total_hours'], kv[0].lower()))
+    )
+
+
+def build_institution_grouped_table_data(summary_data, sort_by="total", by_hours=False):
+    """
+    Builds a grouped-by-institution table.  Each institution block shows its
+    individual trainers (sorted by sort_by) followed by a subtotal row.
+
+    Returns (header, blocks, grand_totals_row) where blocks is a list of
+    (institution_label, person_rows, subtotals_row) tuples.  Column layout
+    always shows hours (most informative for the grouped view) plus an
+    institution share column.
+    """
+    roles = summary_data['roles']
+    person_stats = summary_data['person_stats']
+    inst_map = build_institution_map(summary_data)
+
+    grand_total_hours = sum(item['total_hours'] for item in person_stats.values())
+    grand_total_events = sum(item['total_events'] for item in person_stats.values())
+    grand_role_hours = {r: sum(p['hours_by_role'].get(r, 0.0) for p in person_stats.values()) for r in roles}
+
+    role_headers = [f"{r.capitalize()} (hrs)" for r in roles]
+    header = ['Institution / Trainer', 'Key'] + role_headers + ['Total Hours', 'Total Events', '% of Hours']
+
+    blocks = []
+    for inst, entry in inst_map.items():
+        inst_pct = (entry['total_hours'] / grand_total_hours * 100) if grand_total_hours > 0 else 0.0
+
+        sorted_people = sort_summary_items(entry['people'], sort_by=sort_by, roles=roles, by_hours=by_hours)
+
+        person_rows = []
+        for p in sorted_people:
+            p_pct = (p['total_hours'] / grand_total_hours * 100) if grand_total_hours > 0 else 0.0
+            row = [f"  {p['fullname']}", p['key']]
+            for r in roles:
+                row.append(f"{p['hours_by_role'].get(r, 0.0):g}")
+            row.append(f"{p['total_hours']:g}")
+            row.append(str(p['total_events']))
+            row.append(f"{p_pct:.1f}%")
+            person_rows.append(row)
+
+        n = len(entry['people'])
+        subtotals_row = [f"  Subtotal {inst} ({n} trainer{'s' if n != 1 else ''})", '']
+        for r in roles:
+            subtotals_row.append(f"{entry['hours_by_role'][r]:g}")
+        subtotals_row.append(f"{entry['total_hours']:g}")
+        subtotals_row.append(str(entry['total_events']))
+        subtotals_row.append(f"{inst_pct:.1f}%")
+
+        blocks.append((inst, person_rows, subtotals_row))
+
+    grand_totals_row = [f"GRAND TOTAL ({len(person_stats)} trainers)", '']
+    for r in roles:
+        grand_totals_row.append(f"{grand_role_hours[r]:g}")
+    grand_totals_row.append(f"{grand_total_hours:g}")
+    grand_totals_row.append(str(grand_total_events))
+    grand_totals_row.append("100.0%")
+
+    return header, blocks, grand_totals_row
+
+
+def format_institution_grouped_text_table(header, blocks, grand_totals_row, title=None):
+    """
+    Formats the institution-grouped summary as an ASCII text table.
+    Institution names appear as section banners; person rows are indented.
+    """
+    all_rows = [header]
+    for _inst, person_rows, subtotals_row in blocks:
+        all_rows.extend(person_rows)
+        all_rows.append(subtotals_row)
+    all_rows.append(grand_totals_row)
+
+    col_widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(header))]
+
+    fmt_parts = []
+    for i, w in enumerate(col_widths):
+        if i < 2:
+            fmt_parts.append(f"{{:<{w}}}")
+        else:
+            fmt_parts.append(f"{{:>{w}}}")
+    fmt = "  ".join(fmt_parts)
+
+    total_width = sum(col_widths) + 2 * (len(col_widths) - 1)
+    sep = "  ".join(["-" * w for w in col_widths])
+
+    lines = []
+    if title:
+        lines.append(title)
+        lines.append("=" * max(len(title), total_width))
+
+    lines.append(fmt.format(*header))
+    lines.append(sep)
+
+    for inst, person_rows, subtotals_row in blocks:
+        lines.append(f"[ {inst} ]")
+        for row in person_rows:
+            lines.append(fmt.format(*row))
+        lines.append(fmt.format(*subtotals_row))
+        lines.append(sep)
+
+    lines.append(fmt.format(*grand_totals_row))
+    lines.append("=" * total_width)
+    return "\n".join(lines)
+
+
+def format_institution_grouped_csv(header, blocks, grand_totals_row):
+    """Formats the institution-grouped summary as CSV."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    for inst, person_rows, subtotals_row in blocks:
+        writer.writerow([f"[ {inst} ]"] + [''] * (len(header) - 1))
+        for row in person_rows:
+            writer.writerow(row)
+        writer.writerow(subtotals_row)
+    writer.writerow(grand_totals_row)
+    return output.getvalue()
 
 
 def format_summary_text_table(header, rows, totals_row, unassigned_row, title=None):
@@ -1083,18 +1283,25 @@ def format_summary_csv(header, rows, totals_row, unassigned_row):
 def action_summary(args, global_config):
     """
     Action: create a summary of how many times each person is involved for each type
-    of role over the course of a session.
+    of role over the course of a session.  Supports flat and institution-grouped views.
     """
-    sheet_name = getattr(args, 'sheet', None) or getattr(args, 'from_sheet', None) or global_config['google'].get('calendar_sheet_name')
+    sheet_name = (
+        getattr(args, 'sheet', None)
+        or getattr(args, 'from_sheet', None)
+        or global_config['google'].get('calendar_sheet_name')
+    )
     if not sheet_name:
         print("Error: --sheet must be specified (or google.calendar_sheet_name set in config).")
         sys.exit(1)
 
     csv_arg = getattr(args, 'csv', None)
-    if csv_arg == '-':
+    quiet = (csv_arg == '-')   # suppress stdout status lines when streaming CSV
+
+    if quiet:
         sys.stderr.write(f"Loading session schedule from sheet '{sheet_name}'...\n")
     else:
         print(f"Loading session schedule from sheet '{sheet_name}'...")
+
     calendar = CQORCcalendar.Calendar(global_config, args, sheet_name=sheet_name)
     sessions = calendar.get_all_sessions()
     trainers = load_trainers(global_config, args)
@@ -1106,52 +1313,108 @@ def action_summary(args, global_config):
         roles = list(roles_arg)
 
     by_hours = getattr(args, 'by_hours', False)
-    sort_by = getattr(args, 'sort_by', 'total')
+    sort_by_raw = getattr(args, 'sort_by', 'total')
+    group_by_inst = getattr(args, 'group_by_institution', False)
+
+    # Validate --sort-by before doing any work
+    sort_by = validate_sort_by(sort_by_raw, roles)
 
     summary_data = compute_role_summary(sessions, roles=roles, trainers=trainers)
 
-    header, rows, totals_row, unassigned_row = build_summary_table_data(
-        summary_data, sort_by=sort_by, by_hours=by_hours
-    )
+    title_base = f"Session '{sheet_name}' Role Involvements Summary ({summary_data['total_sessions']} sessions)"
 
-    csv_arg = getattr(args, 'csv', None)
-    if csv_arg == '-':
-        csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
-        sys.stdout.write(csv_text)
-    else:
-        title = f"Session '{sheet_name}' Role Involvements Summary ({summary_data['total_sessions']} sessions)"
-        table_text = format_summary_text_table(header, rows, totals_row, unassigned_row, title=title)
-        print("\n" + table_text)
+    if group_by_inst:
+        # ----------------------------------------------------------------
+        # Grouped-by-institution view
+        # ----------------------------------------------------------------
+        g_title = title_base + " — Grouped by Institution"
+        header, blocks, grand_totals_row = build_institution_grouped_table_data(
+            summary_data, sort_by=sort_by, by_hours=by_hours
+        )
 
-        if csv_arg:
-            csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
-            try:
-                with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
-                    f.write(csv_text)
-                print(f"\nSummary exported to CSV file '{csv_arg}'.")
-            except Exception as e:
-                print(f"\nError exporting to CSV file '{csv_arg}': {e}")
-
-    write_sheet = getattr(args, 'write_sheet', None)
-    if write_sheet:
-        if write_sheet is True or not isinstance(write_sheet, str) or not write_sheet.strip():
-            target_sheet = f"{sheet_name}-summary"
+        if quiet:
+            csv_text = format_institution_grouped_csv(header, blocks, grand_totals_row)
+            sys.stdout.write(csv_text)
         else:
-            target_sheet = write_sheet.strip()
+            table_text = format_institution_grouped_text_table(header, blocks, grand_totals_row, title=g_title)
+            print("\n" + table_text)
 
-        print(f"\nWriting summary to Google Sheet '{target_sheet}'...")
-        try:
-            if not calendar.gsheets.sheet_exists(calendar.spreadsheet_id, target_sheet):
-                if getattr(args, 'verbose', False):
-                    print(f"Creating new sheet tab '{target_sheet}'...")
-                calendar.gsheets.add_sheet(calendar.spreadsheet_id, target_sheet)
+            if csv_arg:
+                csv_text = format_institution_grouped_csv(header, blocks, grand_totals_row)
+                try:
+                    with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
+                        f.write(csv_text)
+                    print(f"\nSummary exported to CSV file '{csv_arg}'.")
+                except Exception as e:
+                    print(f"\nError exporting to CSV file '{csv_arg}': {e}")
 
-            sheet_values = [header] + rows + [totals_row, unassigned_row]
-            calendar.gsheets.clear_values(calendar.spreadsheet_id, "A:Z", target_sheet)
-            calendar.gsheets.update_values(calendar.spreadsheet_id, "A:Z", sheet_values, target_sheet)
-            print(f"Successfully saved summary to sheet tab '{target_sheet}'.")
-        except Exception as e:
-            print(f"Error writing summary to Google Sheet: {e}")
+        write_sheet = getattr(args, 'write_sheet', None)
+        if write_sheet and not quiet:
+            target_sheet = (
+                f"{sheet_name}-by-institution"
+                if (write_sheet is True or not isinstance(write_sheet, str) or not write_sheet.strip())
+                else write_sheet.strip()
+            )
+            print(f"\nWriting grouped summary to Google Sheet '{target_sheet}'...")
+            try:
+                if not calendar.gsheets.sheet_exists(calendar.spreadsheet_id, target_sheet):
+                    if getattr(args, 'verbose', False):
+                        print(f"Creating new sheet tab '{target_sheet}'...")
+                    calendar.gsheets.add_sheet(calendar.spreadsheet_id, target_sheet)
+                sheet_values = [header]
+                for inst, person_rows, subtotals_row in blocks:
+                    sheet_values.append([f"[ {inst} ]"] + [''] * (len(header) - 1))
+                    sheet_values.extend(person_rows)
+                    sheet_values.append(subtotals_row)
+                sheet_values.append(grand_totals_row)
+                calendar.gsheets.clear_values(calendar.spreadsheet_id, "A:Z", target_sheet)
+                calendar.gsheets.update_values(calendar.spreadsheet_id, "A:Z", sheet_values, target_sheet)
+                print(f"Successfully saved grouped summary to sheet tab '{target_sheet}'.")
+            except Exception as e:
+                print(f"Error writing grouped summary to Google Sheet: {e}")
+    else:
+        # ----------------------------------------------------------------
+        # Flat (per-person) view
+        # ----------------------------------------------------------------
+        header, rows, totals_row, unassigned_row = build_summary_table_data(
+            summary_data, sort_by=sort_by, by_hours=by_hours
+        )
+
+        if quiet:
+            csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
+            sys.stdout.write(csv_text)
+        else:
+            table_text = format_summary_text_table(header, rows, totals_row, unassigned_row, title=title_base)
+            print("\n" + table_text)
+
+            if csv_arg:
+                csv_text = format_summary_csv(header, rows, totals_row, unassigned_row)
+                try:
+                    with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
+                        f.write(csv_text)
+                    print(f"\nSummary exported to CSV file '{csv_arg}'.")
+                except Exception as e:
+                    print(f"\nError exporting to CSV file '{csv_arg}': {e}")
+
+        write_sheet = getattr(args, 'write_sheet', None)
+        if write_sheet and not quiet:
+            target_sheet = (
+                f"{sheet_name}-summary"
+                if (write_sheet is True or not isinstance(write_sheet, str) or not write_sheet.strip())
+                else write_sheet.strip()
+            )
+            print(f"\nWriting summary to Google Sheet '{target_sheet}'...")
+            try:
+                if not calendar.gsheets.sheet_exists(calendar.spreadsheet_id, target_sheet):
+                    if getattr(args, 'verbose', False):
+                        print(f"Creating new sheet tab '{target_sheet}'...")
+                    calendar.gsheets.add_sheet(calendar.spreadsheet_id, target_sheet)
+                sheet_values = [header] + rows + [totals_row, unassigned_row]
+                calendar.gsheets.clear_values(calendar.spreadsheet_id, "A:Z", target_sheet)
+                calendar.gsheets.update_values(calendar.spreadsheet_id, "A:Z", sheet_values, target_sheet)
+                print(f"Successfully saved summary to sheet tab '{target_sheet}'.")
+            except Exception as e:
+                print(f"Error writing summary to Google Sheet: {e}")
 
 
 # ---------------------------------------------------------------------------
@@ -1204,20 +1467,26 @@ def main():
     parser.add_argument(
         "--sort-by",
         default="total",
-        help="Sort summary by: total, hours, name, key, or role name (default: total)"
+        help="Sort summary by: total, hours, name, key, institution, or any role name (default: total)"
     )
     parser.add_argument(
         "--by-hours",
         action="store_true",
         default=False,
-        help="Display breakdown of hours instead of event counts in the summary"
+        help="Display breakdown of hours instead of event counts in the summary; when combined with --sort-by, sorts by hours"
+    )
+    parser.add_argument(
+        "--group-by-institution",
+        action="store_true",
+        default=False,
+        help="Group summary output by institution with subtotals (always shows hours breakdown)"
     )
     parser.add_argument(
         "--write-sheet",
         nargs="?",
         const=True,
         default=None,
-        help="Write summary table to Google Sheet (optional sheet name, defaults to <sheet>-summary)"
+        help="Write summary table to Google Sheet (optional sheet name; defaults to <sheet>-summary or <sheet>-by-institution when grouped)"
     )
     parser.add_argument(
         "--csv",
@@ -1295,9 +1564,16 @@ def main():
     )
     p_summary.add_argument("--sheet", default=None, help="Sheet name to summarize (e.g. A26; default: calendar_sheet_name in config)")
     p_summary.add_argument("--roles", default="instructor,host,assistants", help="Comma-separated roles (default: instructor,host,assistants)")
-    p_summary.add_argument("--sort-by", default="total", help="Sort by: total, hours, name, key, or role name (default: total)")
-    p_summary.add_argument("--by-hours", action="store_true", default=False, help="Display breakdown of hours instead of event counts")
-    p_summary.add_argument("--write-sheet", nargs="?", const=True, default=None, help="Write summary table to Google Sheet (optional sheet name, defaults to <sheet>-summary)")
+    p_summary.add_argument(
+        "--sort-by", default="total",
+        help="Sort by: total, hours, name, key, institution, or any role name (default: total)"
+    )
+    p_summary.add_argument("--by-hours", action="store_true", default=False, help="Display breakdown of hours instead of event counts; when combined with --sort-by, sorts by hours")
+    p_summary.add_argument(
+        "--group-by-institution", action="store_true", default=False,
+        help="Group output by institution with subtotals and a grand total (always shows hours breakdown)"
+    )
+    p_summary.add_argument("--write-sheet", nargs="?", const=True, default=None, help="Write summary table to Google Sheet (optional sheet name; defaults to <sheet>-summary or <sheet>-by-institution when grouped)")
     p_summary.add_argument("--csv", default=None, help="Export summary table to CSV file (or '-' for stdout)")
     p_summary.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output")
     p_summary.add_argument("--config_dir", default=".", help="Config dir")
