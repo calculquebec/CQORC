@@ -100,5 +100,57 @@ class TestManageSchedule(unittest.TestCase):
         ]:
             self.assertEqual(adjusted[blank_field], '', f"Expected {blank_field} to be empty string")
 
+    def test_build_tentative_title(self):
+        session = {
+            'course_id': '4',
+            'code': 'LNX101',
+            'title': 'Introduction to Linux',
+            'site': 'online',
+            'instructor': 'Charles'
+        }
+        title = manage_schedule.build_tentative_title(session)
+        self.assertTrue(title.startswith('[TENTATIVE]'))
+        self.assertIn('Introduction to Linux', title)
+        self.assertIn('LNX101', title)
+        self.assertIn('Charles', title)
+
+    def test_build_tentative_description(self):
+        session = {
+            'course_id': '4',
+            'code': 'LNX101',
+            'title': 'Introduction to Linux',
+            'site': 'online',
+            'language': 'EN',
+            'hours': '3',
+            'instructor': 'Charles',
+            'host': 'Caroline',
+            'assistants': 'John, Doe',
+            'template': '12345'
+        }
+        desc = manage_schedule.build_tentative_description(session)
+        self.assertIn('[TENTATIVE EVENT', desc)
+        self.assertIn('Course ID: 4', desc)
+        self.assertIn('Course Code: LNX101', desc)
+        self.assertIn('Instructor: Charles', desc)
+        self.assertIn('Host: Caroline', desc)
+        self.assertIn('Assistants: John, Doe', desc)
+        self.assertIn('No attendees are invited', desc)
+
+    def test_date_formatting_roundtrip(self):
+        tz_name = 'America/Toronto'
+        # Winter date (EST: UTC-5)
+        sheet_winter = '2027-01-20 10:00:00'
+        gcal_winter = manage_schedule.format_dt_for_gcal(sheet_winter, tz_name)
+        self.assertEqual(gcal_winter, '2027-01-20T10:00:00-05:00')
+        back_winter = manage_schedule.format_gcal_dt_to_sheet(gcal_winter, tz_name)
+        self.assertEqual(back_winter, sheet_winter)
+
+        # Fall date (EDT: UTC-4)
+        sheet_fall = '2026-09-23 10:00:00'
+        gcal_fall = manage_schedule.format_dt_for_gcal(sheet_fall, tz_name)
+        self.assertEqual(gcal_fall, '2026-09-23T10:00:00-04:00')
+        back_fall = manage_schedule.format_gcal_dt_to_sheet(gcal_fall, tz_name)
+        self.assertEqual(back_fall, sheet_fall)
+
 if __name__ == '__main__':
     unittest.main()

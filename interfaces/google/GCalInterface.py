@@ -63,7 +63,7 @@ class GCalInterface(GoogleInterface):
             self.logger.error('An error occurred: %s' % error)
 
 
-    def create_event(self, start_time, end_time, summary, description, attendees, send_updates="all"):
+    def create_event(self, start_time, end_time, summary, description, attendees=None, send_updates="all", status=None, extended_properties=None):
         # create an event
         # documentation: https://developers.google.com/calendar/api/v3/reference/events/insert
         try:
@@ -75,11 +75,19 @@ class GCalInterface(GoogleInterface):
             event_dict['summary'] = summary
             event_dict['description'] = description
             event_dict['transparency'] = 'opaque'
-            if isinstance(attendees, str):
-                attendees = [{'email': x.strip()} for x in attendees.split(',')]
-            if isinstance(attendees, list) and isinstance(attendees[0], str):
-                attendees = [{'email': x} for x in attendees]
-            event_dict['attendees'] = attendees
+            if status:
+                event_dict['status'] = status
+            if extended_properties:
+                event_dict['extendedProperties'] = extended_properties
+
+            if isinstance(attendees, str) and attendees.strip():
+                attendees = [{'email': x.strip()} for x in attendees.split(',') if x.strip()]
+            elif isinstance(attendees, str):
+                attendees = []
+            if isinstance(attendees, list) and len(attendees) > 0 and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees if x]
+            if attendees:
+                event_dict['attendees'] = attendees
 
             event = self.get_service().events().insert(
                         calendarId=self.calendar_id,
@@ -90,6 +98,39 @@ class GCalInterface(GoogleInterface):
             return event
         except HttpError as error:
             self.logger.error('An error occurred: %s' % error)
+            raise error
+
+
+    def list_all_events(self, time_min=None, time_max=None, q=None):
+        try:
+            events = []
+            page_token = None
+            while True:
+                kwargs = {
+                    'calendarId': self.calendar_id,
+                    'singleEvents': True,
+                    'orderBy': 'startTime',
+                    'maxResults': 250
+                }
+                if time_min:
+                    kwargs['timeMin'] = time_min
+                if time_max:
+                    kwargs['timeMax'] = time_max
+                if q:
+                    kwargs['q'] = q
+                if page_token:
+                    kwargs['pageToken'] = page_token
+
+                events_result = self.get_service().events().list(**kwargs).execute()
+                events.extend(events_result.get('items', []))
+                page_token = events_result.get('nextPageToken')
+                if not page_token:
+                    break
+            return events
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+            raise error
+
 
 
     def update_event(self, event_id, start_time=None, end_time=None, summary=None, description=None, attendees=None, send_updates="all"):
@@ -105,11 +146,14 @@ class GCalInterface(GoogleInterface):
             if description: event['description'] = description
             event['transparency'] = 'opaque'
 
-            if isinstance(attendees, str):
-                attendees = [{'email': x.strip()} for x in attendees.split(',')]
-            if isinstance(attendees, list) and isinstance(attendees[0], str):
-                attendees = [{'email': x} for x in attendees]
-            if attendees: event['attendees'] = attendees
+            if isinstance(attendees, str) and attendees.strip():
+                attendees = [{'email': x.strip()} for x in attendees.split(',') if x.strip()]
+            elif isinstance(attendees, str):
+                attendees = []
+            if isinstance(attendees, list) and len(attendees) > 0 and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees if x]
+            if attendees is not None:
+                event['attendees'] = attendees
 
             event = self.get_service().events().update(
                         calendarId=self.calendar_id,
