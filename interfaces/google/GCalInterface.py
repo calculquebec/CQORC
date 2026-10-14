@@ -23,9 +23,12 @@ class GCalInterface(GoogleInterface):
         try:
             event = self.get_service().events().get(calendarId=self.calendar_id, eventId=event_id).execute()
             return event
-
         except HttpError as error:
+            if error.resp.status in [404, 410]:
+                self.logger.info(f"Event {event_id} not found or deleted (status {error.resp.status})")
+                return None
             self.logger.error('An error occurred: %s' % error)
+            raise error
 
 
     def get_events(self, start_time, limit=10, end_time=None):

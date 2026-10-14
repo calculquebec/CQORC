@@ -76,7 +76,7 @@ class Calendar:
                 self.courses[course_id] = {'sessions': []}
             self.courses[course_id]['sessions'].append(session)
 
-    def update_spreadsheet(self, sheet_name=None):
+    def update_spreadsheet(self, sheet_name=None, clear=False):
         values = [self.header]
         for course in self.courses.values():
             for session in course['sessions']:
@@ -84,5 +84,7 @@ class Calendar:
                 values += [session_line]
 
         target_sheet = sheet_name or self.sheet_name
+        if clear:
+            self.gsheets.clear_values(self.spreadsheet_id, "A:Z", target_sheet)
         self.gsheets.update_values(self.spreadsheet_id, "A:Z", values, target_sheet)
 

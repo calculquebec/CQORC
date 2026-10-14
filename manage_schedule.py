@@ -365,9 +365,40 @@ def action_sync_to_calendar(args, global_config):
     print(f"Synchronizing sessions from sheet '{sheet_name}' to private Google Calendar as tentative events...")
 
     created_count = 0
+    updated_count = 0
+    deleted_from_cal_count = 0
     skipped_count = 0
     existing_count = 0
 
+    # 1. Handle Deletions in spreadsheet (events deleted from sheet -> delete from calendar)
+    active_gcal_ids = {s.get('private_gcal_id') for s in sessions if s.get('private_gcal_id')}
+    try:
+        candidate_events = gcal.list_all_events(q="[TENTATIVE]")
+        for ev in candidate_events:
+            ev_id = ev['id']
+            if ev.get('status') == 'cancelled':
+                continue
+            ext_sheet = ev.get('extendedProperties', {}).get('private', {}).get('sheet_name')
+            summary = ev.get('summary', '')
+            is_sheet_event = (ext_sheet == sheet_name) or ('[TENTATIVE]' in summary and not ext_sheet)
+            if is_sheet_event and ev_id not in active_gcal_ids:
+                # Event was deleted from the spreadsheet! Delete from Google Calendar
+                if args.dry_run:
+                    print(f"  [DRY RUN] Would delete tentative event from calendar (removed from sheet): {ev_id} ({summary})")
+                    deleted_from_cal_count += 1
+                else:
+                    try:
+                        gcal.delete_event(ev_id, send_updates="none")
+                        print(f"  Deleted tentative event from calendar (removed from sheet): {ev_id} ({summary})")
+                        deleted_from_cal_count += 1
+                    except Exception as e:
+                        print(f"  Warning: Could not delete orphaned event {ev_id}: {e}")
+    except Exception as e:
+        if args.verbose:
+            print(f"Note: error searching tentative events for deletion check: {e}")
+
+    # 2. Handle Additions & Updates in spreadsheet (events added/updated in sheet -> create/update on calendar)
+    sheet_needs_save = False
     for session in sessions:
         course_id = session.get('course_id')
         code = session.get('code') or ''
@@ -382,19 +413,6 @@ def action_sync_to_calendar(args, global_config):
             skipped_count += 1
             continue
 
-        existing_gcal_id = session.get('private_gcal_id')
-        if existing_gcal_id and not getattr(args, 'force', False):
-            # Check if event still exists on calendar
-            try:
-                ev = gcal.get_event(existing_gcal_id)
-                if ev and ev.get('status') != 'cancelled':
-                    if args.verbose:
-                        print(f"  Course {course_id} ({code}): already has gcal event {existing_gcal_id}, skipping")
-                    existing_count += 1
-                    continue
-            except Exception:
-                pass
-
         event_title = build_tentative_title(session)
         description = build_tentative_description(session)
         start_iso = format_dt_for_gcal(start_date, tz_name)
@@ -407,39 +425,93 @@ def action_sync_to_calendar(args, global_config):
             }
         }
 
-        if args.dry_run:
-            print(f"  [DRY RUN] Would create tentative event for Course {course_id} ({code}):")
-            print(f"    Title: {event_title}")
-            print(f"    Start: {start_iso} | End: {end_iso}")
-            print(f"    Attendees: None (nobody invited)")
-            created_count += 1
-        else:
-            try:
-                ev = gcal.create_event(
-                    start_time=start_iso,
-                    end_time=end_iso,
-                    summary=event_title,
-                    description=description,
-                    attendees=None,
-                    send_updates="none",
-                    status="tentative",
-                    extended_properties=ext_props
-                )
-                event_id = ev['id']
-                session['private_gcal_id'] = event_id
-                created_count += 1
-                if args.verbose or created_count <= 5:
-                    print(f"  Created tentative event {event_id} for Course {course_id} ({code}): {start_date}")
-            except Exception as e:
-                print(f"  Error creating event for Course {course_id} ({code}): {e}")
+        existing_gcal_id = session.get('private_gcal_id')
 
-    if not args.dry_run and created_count > 0:
+        # Check if event exists on calendar
+        ev = None
+        if existing_gcal_id:
+            try:
+                ev = gcal.get_event(existing_gcal_id)
+            except Exception:
+                pass
+
+        if not existing_gcal_id or not ev or ev.get('status') == 'cancelled':
+            # Addition or Re-creation needed!
+            if args.dry_run:
+                action_label = "re-create" if existing_gcal_id else "create"
+                print(f"  [DRY RUN] Would {action_label} tentative event for Course {course_id} ({code}):")
+                print(f"    Title: {event_title}")
+                print(f"    Start: {start_iso} | End: {end_iso}")
+                created_count += 1
+            else:
+                try:
+                    ev = gcal.create_event(
+                        start_time=start_iso,
+                        end_time=end_iso,
+                        summary=event_title,
+                        description=description,
+                        attendees=None,
+                        send_updates="none",
+                        status="tentative",
+                        extended_properties=ext_props
+                    )
+                    event_id = ev['id']
+                    session['private_gcal_id'] = event_id
+                    created_count += 1
+                    sheet_needs_save = True
+                    print(f"  Created tentative event {event_id} for Course {course_id} ({code}): {start_date}")
+                except Exception as e:
+                    print(f"  Error creating event for Course {course_id} ({code}): {e}")
+        else:
+            # Event already exists on calendar -> check for modifications in sheet
+            gcal_start = ev['start'].get('dateTime') or ev['start'].get('date')
+            gcal_end = ev['end'].get('dateTime') or ev['end'].get('date')
+            new_start = format_gcal_dt_to_sheet(gcal_start, tz_name)
+            new_end = format_gcal_dt_to_sheet(gcal_end, tz_name)
+            gcal_desc = ev.get('description', '')
+            gcal_summary = ev.get('summary', '')
+
+            needs_update = False
+            if new_start != start_date or new_end != end_date:
+                needs_update = True
+            if description.strip() != gcal_desc.strip():
+                needs_update = True
+            if event_title != gcal_summary:
+                needs_update = True
+
+            if needs_update or getattr(args, 'force', False):
+                if args.dry_run:
+                    print(f"  [DRY RUN] Would update Google Calendar event {existing_gcal_id} for Course {course_id} ({code}) with sheet changes.")
+                    updated_count += 1
+                else:
+                    try:
+                        gcal.update_event(
+                            existing_gcal_id,
+                            start_time=start_iso,
+                            end_time=end_iso,
+                            summary=event_title,
+                            description=description,
+                            attendees=None,
+                            send_updates="none"
+                        )
+                        print(f"  Updated tentative event {existing_gcal_id} for Course {course_id} ({code})")
+                        updated_count += 1
+                    except Exception as e:
+                        print(f"  Error updating event {existing_gcal_id} for Course {course_id}: {e}")
+            else:
+                if args.verbose:
+                    print(f"  Course {course_id} ({code}): already up to date on calendar")
+                existing_count += 1
+
+    if not args.dry_run and sheet_needs_save:
         print(f"\nWriting updated Google Calendar IDs to sheet '{sheet_name}'...")
-        calendar.update_spreadsheet(sheet_name=sheet_name)
+        calendar.update_spreadsheet(sheet_name=sheet_name, clear=True)
 
     print(f"\nSummary for sync-to-calendar:")
-    print(f"  Tentative events created: {created_count}")
-    print(f"  Already existed on calendar: {existing_count}")
+    print(f"  Created on calendar (additions): {created_count}")
+    print(f"  Updated on calendar: {updated_count}")
+    print(f"  Deleted from calendar (removed from sheet): {deleted_from_cal_count}")
+    print(f"  Already existed & unchanged: {existing_count}")
     print(f"  Skipped (no dates): {skipped_count}")
 
 
@@ -461,8 +533,13 @@ def action_sync_from_calendar(args, global_config):
     print(f"Checking for changes on private Google Calendar for sheet '{sheet_name}'...")
 
     updated_count = 0
+    deleted_from_sheet_count = 0
+    added_to_sheet_count = 0
     unchanged_count = 0
     missing_count = 0
+
+    deleted_sessions = set()
+    seen_gcal_ids = set()
 
     for session in sessions:
         course_id = session.get('course_id')
@@ -470,14 +547,16 @@ def action_sync_from_calendar(args, global_config):
         title = session.get('title') or ''
         gcal_id = session.get('private_gcal_id')
 
-        if not course_id and not title:
+        if not course_id and not title and not session.get('start_date'):
             continue
 
         if not gcal_id:
             if args.verbose:
-                print(f"  Course {course_id} ({code}): No private_gcal_id recorded.")
+                print(f"  Course {course_id} ({code}): No private_gcal_id recorded (new in sheet).")
             missing_count += 1
             continue
+
+        seen_gcal_ids.add(gcal_id)
 
         try:
             ev = gcal.get_event(gcal_id)
@@ -486,10 +565,12 @@ def action_sync_from_calendar(args, global_config):
             missing_count += 1
             continue
 
+        # Check if event was deleted on Google Calendar
         if not ev or ev.get('status') == 'cancelled':
-            if args.verbose:
-                print(f"  Course {course_id} ({code}): Event {gcal_id} not found or cancelled on calendar.")
-            missing_count += 1
+            # Event was deleted manually from Google Calendar!
+            print(f"  Course {course_id} ({code} - {title[:30]}): DELETED on Google Calendar -> Removing from spreadsheet")
+            deleted_sessions.add(id(session))
+            deleted_from_sheet_count += 1
             continue
 
         session_changed = False
@@ -539,18 +620,64 @@ def action_sync_from_calendar(args, global_config):
                 print(f"  Course {course_id} ({code}): unchanged ({current_start})")
             unchanged_count += 1
 
-    if updated_count > 0:
+    # Check for tentative events created manually in Google Calendar that are not yet in the sheet
+    added_sessions = []
+    try:
+        candidate_events = gcal.list_all_events(q="[TENTATIVE]")
+        for ev in candidate_events:
+            ev_id = ev['id']
+            if ev.get('status') == 'cancelled':
+                continue
+            if ev_id in seen_gcal_ids:
+                continue
+            ext_sheet = ev.get('extendedProperties', {}).get('private', {}).get('sheet_name')
+            if ext_sheet == sheet_name:
+                desc = ev.get('description', '')
+                parsed = parse_tentative_description(desc)
+                gcal_start = ev['start'].get('dateTime') or ev['start'].get('date')
+                gcal_end = ev['end'].get('dateTime') or ev['end'].get('date')
+
+                new_session = {k: '' for k in calendar.header}
+                new_session['course_id'] = parsed.get('Course ID') or ''
+                new_session['code'] = parsed.get('Course Code') or ''
+                new_session['title'] = parsed.get('Title') or ev.get('summary', '').replace('[TENTATIVE]', '').strip()
+                new_session['site'] = parsed.get('Site') or ''
+                new_session['language'] = parsed.get('Language') or ''
+                new_session['hours'] = parsed.get('Hours') or ''
+                new_session['instructor'] = parsed.get('Instructor') or ''
+                new_session['host'] = parsed.get('Host') or ''
+                new_session['assistants'] = parsed.get('Assistants') or ''
+                new_session['template'] = parsed.get('Template') or ''
+                new_session['start_date'] = format_gcal_dt_to_sheet(gcal_start, tz_name)
+                new_session['end_date'] = format_gcal_dt_to_sheet(gcal_end, tz_name)
+                new_session['private_gcal_id'] = ev_id
+
+                added_sessions.append(new_session)
+                print(f"  Course {new_session['course_id']} ({new_session['code']} - {new_session['title'][:30]}): ADDED on Google Calendar -> Adding to spreadsheet")
+                added_to_sheet_count += 1
+    except Exception as e:
+        if args.verbose:
+            print(f"Note: error checking for new calendar events: {e}")
+
+    # Build the final list of sessions
+    remaining_sessions = [s for s in sessions if id(s) not in deleted_sessions] + added_sessions
+
+    has_sheet_changes = (updated_count > 0 or deleted_from_sheet_count > 0 or added_to_sheet_count > 0)
+    if has_sheet_changes:
         if args.dry_run:
-            print(f"\n[DRY RUN] Would update {updated_count} session(s) in sheet '{sheet_name}'.")
+            print(f"\n[DRY RUN] Would update sheet '{sheet_name}' ({updated_count} updated, {deleted_from_sheet_count} deleted, {added_to_sheet_count} added).")
         else:
-            print(f"\nWriting {updated_count} updated session(s) to sheet '{sheet_name}'...")
-            calendar.update_spreadsheet(sheet_name=sheet_name)
+            print(f"\nWriting changes to sheet '{sheet_name}'...")
+            calendar.set_sessions(remaining_sessions)
+            calendar.update_spreadsheet(sheet_name=sheet_name, clear=True)
             print(f"Successfully updated sheet '{sheet_name}'.")
     else:
         print("\nNo changes detected on Google Calendar.")
 
     print(f"\nSummary for sync-from-calendar:")
-    print(f"  Updated: {updated_count}")
+    print(f"  Updated from calendar: {updated_count}")
+    print(f"  Deleted from sheet (deleted from calendar): {deleted_from_sheet_count}")
+    print(f"  Added to sheet (added from calendar): {added_to_sheet_count}")
     print(f"  Unchanged: {unchanged_count}")
     print(f"  Missing/No event: {missing_count}")
 
