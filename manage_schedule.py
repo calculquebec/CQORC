@@ -185,6 +185,7 @@ def build_tentative_description(session):
         "[TENTATIVE EVENT - SCHEDULE PLANNING]",
         "Note: This is a tentative planning event. No attendees are invited.",
         "",
+        "--- Session Details ---",
         f"Course ID: {session.get('course_id') or ''}",
         f"Course Code: {session.get('code') or ''}",
         f"Title: {session.get('title') or ''}",
@@ -197,6 +198,47 @@ def build_tentative_description(session):
         f"Template: {session.get('template') or ''}",
     ]
     return "\n".join(lines)
+
+
+# Fields that can be updated from the calendar description back to the sheet.
+# Maps description key -> session dict key.
+DESCRIPTION_SYNC_FIELDS = {
+    'Title':       'title',
+    'Site':        'site',
+    'Language':    'language',
+    'Hours':       'hours',
+    'Instructor':  'instructor',
+    'Host':        'host',
+    'Assistants':  'assistants',
+}
+
+
+def parse_tentative_description(description_text):
+    """
+    Parses a tentative event description produced by build_tentative_description()
+    and returns a dict of field values found in the "--- Session Details ---" block.
+
+    Keys match the labels used in build_tentative_description (e.g. 'Title',
+    'Instructor', 'Host', 'Assistants', etc.).  Values are stripped strings;
+    absent or blank fields are returned as empty strings.
+    """
+    if not description_text:
+        return {}
+
+    parsed = {}
+    in_details = False
+    for line in description_text.splitlines():
+        line = line.strip()
+        if line == '--- Session Details ---':
+            in_details = True
+            continue
+        if not in_details:
+            continue
+        if ':' in line:
+            key, _, value = line.partition(':')
+            parsed[key.strip()] = value.strip()
+
+    return parsed
 
 
 def format_dt_for_gcal(dt_str, tz_name):
@@ -416,7 +458,7 @@ def action_sync_from_calendar(args, global_config):
 
     gcal, tz_name = init_gcal(global_config, args)
     sessions = calendar.get_all_sessions()
-    print(f"Checking for moved events on private Google Calendar for sheet '{sheet_name}'...")
+    print(f"Checking for changes on private Google Calendar for sheet '{sheet_name}'...")
 
     updated_count = 0
     unchanged_count = 0
@@ -426,8 +468,6 @@ def action_sync_from_calendar(args, global_config):
         course_id = session.get('course_id')
         code = session.get('code') or ''
         title = session.get('title') or ''
-        current_start = session.get('start_date') or ''
-        current_end = session.get('end_date') or ''
         gcal_id = session.get('private_gcal_id')
 
         if not course_id and not title:
@@ -452,18 +492,47 @@ def action_sync_from_calendar(args, global_config):
             missing_count += 1
             continue
 
+        session_changed = False
+        changes = []
+
+        # --- Check dates ---
+        current_start = session.get('start_date') or ''
+        current_end = session.get('end_date') or ''
         gcal_start = ev['start'].get('dateTime') or ev['start'].get('date')
         gcal_end = ev['end'].get('dateTime') or ev['end'].get('date')
-
         new_start = format_gcal_dt_to_sheet(gcal_start, tz_name)
         new_end = format_gcal_dt_to_sheet(gcal_end, tz_name)
 
-        if new_start != current_start or new_end != current_end:
-            print(f"  Course {course_id} ({code} - {title[:30]}): MOVED")
-            print(f"    Start: {current_start} -> {new_start}")
-            print(f"    End:   {current_end} -> {new_end}")
+        if new_start != current_start:
+            changes.append(f"    Start:      {current_start!r} -> {new_start!r}")
             session['start_date'] = new_start
+            session_changed = True
+        if new_end != current_end:
+            changes.append(f"    End:        {current_end!r} -> {new_end!r}")
             session['end_date'] = new_end
+            session_changed = True
+
+        # --- Check description fields (people & metadata) ---
+        desc = ev.get('description') or ''
+        parsed = parse_tentative_description(desc)
+
+        for desc_key, session_key in DESCRIPTION_SYNC_FIELDS.items():
+            new_val = parsed.get(desc_key, None)
+            if new_val is None:
+                # Field not found in description - skip (old format or manually removed)
+                continue
+            current_val = (session.get(session_key) or '').strip()
+            new_val = new_val.strip()
+            if new_val != current_val:
+                label = f"{desc_key} ({session_key})"
+                changes.append(f"    {label:<22} {current_val!r} -> {new_val!r}")
+                session[session_key] = new_val
+                session_changed = True
+
+        if session_changed:
+            print(f"  Course {course_id} ({code} - {title[:30]}): UPDATED")
+            for ch in changes:
+                print(ch)
             updated_count += 1
         else:
             if args.verbose:
@@ -478,12 +547,13 @@ def action_sync_from_calendar(args, global_config):
             calendar.update_spreadsheet(sheet_name=sheet_name)
             print(f"Successfully updated sheet '{sheet_name}'.")
     else:
-        print("\nNo schedule changes detected on Google Calendar.")
+        print("\nNo changes detected on Google Calendar.")
 
     print(f"\nSummary for sync-from-calendar:")
-    print(f"  Moved/Updated: {updated_count}")
+    print(f"  Updated: {updated_count}")
     print(f"  Unchanged: {unchanged_count}")
     print(f"  Missing/No event: {missing_count}")
+
 
 
 # ---------------------------------------------------------------------------

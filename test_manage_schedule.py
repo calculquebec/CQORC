@@ -152,5 +152,67 @@ class TestManageSchedule(unittest.TestCase):
         back_fall = manage_schedule.format_gcal_dt_to_sheet(gcal_fall, tz_name)
         self.assertEqual(back_fall, sheet_fall)
 
+    def test_parse_tentative_description(self):
+        session = {
+            'course_id': '5',
+            'code': 'PYT101',
+            'title': 'Introduction to Python',
+            'site': 'en ligne',
+            'language': 'FR',
+            'hours': '3',
+            'instructor': 'Alice',
+            'host': 'Bob',
+            'assistants': 'Charlie, Dave',
+            'template': '9999'
+        }
+        desc = manage_schedule.build_tentative_description(session)
+        parsed = manage_schedule.parse_tentative_description(desc)
+
+        self.assertEqual(parsed.get('Title'), 'Introduction to Python')
+        self.assertEqual(parsed.get('Site'), 'en ligne')
+        self.assertEqual(parsed.get('Language'), 'FR')
+        self.assertEqual(parsed.get('Hours'), '3')
+        self.assertEqual(parsed.get('Instructor'), 'Alice')
+        self.assertEqual(parsed.get('Host'), 'Bob')
+        self.assertEqual(parsed.get('Assistants'), 'Charlie, Dave')
+        self.assertEqual(parsed.get('Course Code'), 'PYT101')
+        self.assertEqual(parsed.get('Course ID'), '5')
+
+    def test_parse_tentative_description_with_modifications(self):
+        """Simulate a user editing the description in Google Calendar."""
+        session = {
+            'course_id': '5',
+            'code': 'PYT101',
+            'title': 'Introduction to Python',
+            'site': 'en ligne',
+            'language': 'FR',
+            'hours': '3',
+            'instructor': 'Alice',
+            'host': 'Bob',
+            'assistants': 'Charlie',
+            'template': '9999'
+        }
+        original_desc = manage_schedule.build_tentative_description(session)
+
+        # Simulate editing: change instructor, add assistant
+        modified_desc = original_desc.replace('Instructor: Alice', 'Instructor: Xavier')
+        modified_desc = modified_desc.replace('Assistants: Charlie', 'Assistants: Charlie, Eve')
+
+        parsed = manage_schedule.parse_tentative_description(modified_desc)
+        self.assertEqual(parsed.get('Instructor'), 'Xavier')
+        self.assertEqual(parsed.get('Assistants'), 'Charlie, Eve')
+        self.assertEqual(parsed.get('Host'), 'Bob')  # unchanged
+
+    def test_parse_tentative_description_empty(self):
+        self.assertEqual(manage_schedule.parse_tentative_description(''), {})
+        self.assertEqual(manage_schedule.parse_tentative_description(None), {})
+
+    def test_parse_tentative_description_old_format(self):
+        """Old-format descriptions (no '--- Session Details ---' sentinel) return empty dict."""
+        old_desc = "[TENTATIVE EVENT]\nInstructor: Alice\nHost: Bob"
+        parsed = manage_schedule.parse_tentative_description(old_desc)
+        # Without the sentinel, nothing is parsed (graceful degradation)
+        self.assertEqual(parsed, {})
+
 if __name__ == '__main__':
     unittest.main()
