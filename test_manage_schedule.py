@@ -549,6 +549,50 @@ class TestCheckConflicts(unittest.TestCase):
         self.assertIn("Trainer Name", csv_text)
         self.assertIn("Busy Start", csv_text)
 
+    def test_column_letter(self):
+        self.assertEqual(manage_schedule.column_letter(0), 'A')
+        self.assertEqual(manage_schedule.column_letter(25), 'Z')
+        self.assertEqual(manage_schedule.column_letter(26), 'AA')
+        self.assertEqual(manage_schedule.column_letter(27), 'AB')
+
+    def test_build_summary_formula_rows(self):
+        sessions = [
+            {'course_id': 'C1', 'title': 'T', 'start_date': '2027-01-05', 'instructor': 'Julie', 'host': 'JulieFL', 'hours': '3'},
+            {'course_id': 'C2', 'title': 'T', 'start_date': '2027-01-06', 'instructor': 'Julie', 'host': '', 'hours': '2'},
+        ]
+        source_header = ['course_id', 'title', 'start_date', 'instructor', 'host', 'hours']
+        summary = manage_schedule.compute_role_summary(sessions, roles=['instructor', 'host'])
+        header, rows, totals_row, unassigned_row = manage_schedule.build_summary_formula_rows(
+            summary, source_header, "H27"
+        )
+        self.assertEqual(header, ['Key', 'Full Name', 'Institution', 'Instructor', 'Host', 'Total Events', 'Total Hours'])
+        self.assertEqual([r[0] for r in rows], ['Julie', 'JulieFL'])
+        # Instructor count for Julie reads column D of H27 and matches the exact key only
+        self.assertEqual(rows[0][3], '=SUMPRODUCT(--REGEXMATCH(\'H27\'!D2:D,"(?:^|,)\\s*Julie\\s*(?:,|$)"))')
+        self.assertEqual(rows[0][5], '=SUM(D2:E2)')
+        self.assertIn("IFERROR(VALUE('H27'!F2:F),0)", rows[0][6])
+        self.assertEqual(totals_row[3], '=SUM(D2:D3)')
+        self.assertIn("LEN(TRIM('H27'!E2:E))=0", unassigned_row[4])
+
+    def test_formula_arg_separator(self):
+        self.assertEqual(manage_schedule.formula_arg_separator('en_US'), ',')
+        self.assertEqual(manage_schedule.formula_arg_separator('fr_CA'), ';')
+        self.assertEqual(manage_schedule.formula_arg_separator(None), ',')
+
+    def test_build_summary_formula_rows_semicolon_separator(self):
+        sessions = [{'course_id': 'C1', 'title': 'T', 'start_date': '2027-01-05', 'instructor': 'Julie', 'hours': '3'}]
+        summary = manage_schedule.compute_role_summary(sessions, roles=['instructor'])
+        _, rows, _, _ = manage_schedule.build_summary_formula_rows(
+            summary, ['course_id', 'title', 'start_date', 'instructor', 'hours'], "H27", arg_sep=';'
+        )
+        self.assertIn("REGEXMATCH('H27'!D2:D;\"", rows[0][3])
+        self.assertIn("IFERROR(VALUE('H27'!E2:E);0)", rows[0][5])
+
+    def test_build_summary_formula_rows_missing_column(self):
+        summary = manage_schedule.compute_role_summary([], roles=['instructor'])
+        with self.assertRaises(ValueError):
+            manage_schedule.build_summary_formula_rows(summary, ['course_id'], "H27")
+
 
 if __name__ == '__main__':
     unittest.main()

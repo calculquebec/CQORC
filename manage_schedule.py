@@ -1186,6 +1186,105 @@ def build_summary_table_data(summary_data, sort_by="total", by_hours=False):
     return header, rows, totals_row, unassigned_row
 
 
+def column_letter(index):
+    """Converts a 0-based column index to a spreadsheet column letter (0 -> A, 26 -> AA)."""
+    letters = ''
+    index += 1
+    while index > 0:
+        index, rem = divmod(index - 1, 26)
+        letters = chr(ord('A') + rem) + letters
+    return letters
+
+
+# Languages whose spreadsheets use '.' as the decimal separator, and therefore
+# ',' between function arguments; other locales (e.g. fr_CA) use ';'.
+DOT_DECIMAL_LANGUAGES = {'en', 'ja', 'zh', 'ko', 'th', 'he', 'iw', 'hi', 'ms', 'fil'}
+
+
+def formula_arg_separator(locale):
+    """Returns the function-argument separator Google Sheets expects for a spreadsheet locale."""
+    language = (locale or 'en_US').split('_')[0].lower()
+    return ',' if language in DOT_DECIMAL_LANGUAGES else ';'
+
+
+def build_summary_formula_rows(summary_data, source_header, source_sheet, sort_by="total", by_hours=False, arg_sep=','):
+    """
+    Same layout as build_summary_table_data, but every number is a Google
+    Sheets formula reading the source sheet, so the table recalculates on
+    every edit of the source sheet.
+
+    The list of people (and their order) is fixed when the table is written:
+    someone added to the source sheet afterwards only gets a row once the
+    command is run again.
+
+    Formulas use English function names; the Sheets API parses them with the
+    spreadsheet locale's argument separator, passed as arg_sep (see
+    formula_arg_separator).
+    """
+    roles = summary_data['roles']
+    for col in roles + ['hours', 'course_id', 'title', 'start_date']:
+        if col not in source_header:
+            raise ValueError(f"Column '{col}' not found in sheet '{source_sheet}'.")
+
+    sheet_ref = "'" + source_sheet.replace("'", "''") + "'"
+
+    def rng(col):
+        letter = column_letter(source_header.index(col))
+        return f"{sheet_ref}!{letter}2:{letter}"
+
+    hours_values = f"IFERROR(VALUE({rng('hours')}){arg_sep}0)"
+
+    def match(role, key):
+        # Exact trainer key within the comma-separated cell (so 'Julie' does
+        # not match 'JulieFL'), mirroring compute_role_summary.
+        pattern = r'(?:^|,)\s*' + re.escape(key).replace('"', '""') + r'\s*(?:,|$)'
+        return f'REGEXMATCH({rng(role)}{arg_sep}"{pattern}")'
+
+    def count_expr(role, key):
+        return f"SUMPRODUCT(--{match(role, key)})"
+
+    def hours_expr(role, key):
+        return f"SUMPRODUCT({match(role, key)}*{hours_values})"
+
+    n_roles = len(roles)
+    first_role_col = column_letter(3)
+    last_role_col = column_letter(3 + n_roles - 1)
+    sorted_stats = sort_summary_items(list(summary_data['person_stats'].values()), sort_by=sort_by, roles=roles, by_hours=by_hours)
+
+    if by_hours:
+        header = ['Key', 'Full Name', 'Institution'] + [f"{r.capitalize()} (hrs)" for r in roles] + ['Total Hours', 'Total Events']
+        cell_expr, other_total_expr = hours_expr, count_expr
+    else:
+        header = ['Key', 'Full Name', 'Institution'] + [r.capitalize() for r in roles] + ['Total Events', 'Total Hours']
+        cell_expr, other_total_expr = count_expr, hours_expr
+
+    rows = []
+    for i, item in enumerate(sorted_stats):
+        row_num = i + 2
+        key = item['key']
+        row = [key, item['fullname'], item['institution']]
+        row += ['=' + cell_expr(r, key) for r in roles]
+        row.append(f"=SUM({first_role_col}{row_num}:{last_role_col}{row_num})")
+        row.append('=' + '+'.join(other_total_expr(r, key) for r in roles))
+        rows.append(row)
+
+    last_person_row = len(rows) + 1
+    totals_row = ['TOTALS', '', '']
+    for c in range(3, 3 + n_roles + 2):
+        letter = column_letter(c)
+        totals_row.append(f"=SUM({letter}2:{letter}{last_person_row})" if rows else '0')
+
+    # A session counts as unassigned for a role when the role cell is blank
+    # but the row is a real session (same rule as compute_role_summary).
+    real_session = f"((LEN(TRIM({rng('course_id')}))+LEN(TRIM({rng('title')}))+LEN(TRIM({rng('start_date')})))>0)"
+    unassigned_row = ['UNASSIGNED', '(sessions missing role)', '']
+    for r in roles:
+        unassigned_row.append(f"=SUMPRODUCT((LEN(TRIM({rng(r)}))=0)*{real_session})")
+    unassigned_row += ['', '']
+
+    return header, rows, totals_row, unassigned_row
+
+
 # ---------------------------------------------------------------------------
 # Institution Grouping
 # ---------------------------------------------------------------------------
@@ -1423,6 +1522,13 @@ def action_summary(args, global_config):
     by_hours = getattr(args, 'by_hours', False)
     sort_by_raw = getattr(args, 'sort_by', 'total')
     group_by_inst = getattr(args, 'group_by_institution', False)
+    live = getattr(args, 'live', False)
+    if live and not getattr(args, 'write_sheet', None):
+        print("Error: --live requires --write-sheet.")
+        sys.exit(1)
+    if live and group_by_inst:
+        print("Error: --live is not supported with --group-by-institution.")
+        sys.exit(1)
 
     # Validate --sort-by before doing any work
     sort_by = validate_sort_by(sort_by_raw, roles)
@@ -1517,10 +1623,23 @@ def action_summary(args, global_config):
                     if getattr(args, 'verbose', False):
                         print(f"Creating new sheet tab '{target_sheet}'...")
                     calendar.gsheets.add_sheet(calendar.spreadsheet_id, target_sheet)
-                sheet_values = [header] + rows + [totals_row, unassigned_row]
+                if live:
+                    locale = calendar.gsheets.get_service().spreadsheets().get(
+                        spreadsheetId=calendar.spreadsheet_id, fields='properties(locale)'
+                    ).execute().get('properties', {}).get('locale')
+                    f_header, f_rows, f_totals, f_unassigned = build_summary_formula_rows(
+                        summary_data, calendar.header, sheet_name, sort_by=sort_by, by_hours=by_hours,
+                        arg_sep=formula_arg_separator(locale)
+                    )
+                    sheet_values = [f_header] + f_rows + [f_totals, f_unassigned]
+                else:
+                    sheet_values = [header] + rows + [totals_row, unassigned_row]
                 calendar.gsheets.clear_values(calendar.spreadsheet_id, "A:Z", target_sheet)
                 calendar.gsheets.update_values(calendar.spreadsheet_id, "A:Z", sheet_values, target_sheet)
                 print(f"Successfully saved summary to sheet tab '{target_sheet}'.")
+                if live:
+                    print(f"The numbers are formulas and update whenever '{sheet_name}' is edited. "
+                          f"Re-run this command to add rows for people newly added to '{sheet_name}'.")
             except Exception as e:
                 print(f"Error writing summary to Google Sheet: {e}")
 
@@ -2283,6 +2402,12 @@ def main():
         help="Write summary table to Google Sheet (optional sheet name; defaults to <sheet>-summary or <sheet>-by-institution when grouped)"
     )
     parser.add_argument(
+        "--live",
+        action="store_true",
+        default=False,
+        help="With --write-sheet: write formulas that recalculate whenever the source sheet is edited (summary)"
+    )
+    parser.add_argument(
         "--csv",
         default=None,
         help="Export summary table to CSV file (or '-' for stdout)"
@@ -2368,6 +2493,7 @@ def main():
         help="Group output by institution with subtotals and a grand total (always shows hours breakdown)"
     )
     p_summary.add_argument("--write-sheet", nargs="?", const=True, default=None, help="Write summary table to Google Sheet (optional sheet name; defaults to <sheet>-summary or <sheet>-by-institution when grouped)")
+    p_summary.add_argument("--live", action="store_true", default=False, help="With --write-sheet: write formulas that recalculate whenever the source sheet is edited, instead of fixed numbers")
     p_summary.add_argument("--csv", default=None, help="Export summary table to CSV file (or '-' for stdout)")
     p_summary.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output")
     p_summary.add_argument("--config_dir", default=".", help="Config dir")
