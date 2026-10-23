@@ -594,5 +594,22 @@ class TestCheckConflicts(unittest.TestCase):
             manage_schedule.build_summary_formula_rows(summary, ['course_id'], "H27")
 
 
+class TestPrivateCalendarUrl(unittest.TestCase):
+    def test_built_from_calendar_id(self):
+        config = {'google.calendar': {'calendar_id': 'abc123@group.calendar.google.com'}}
+        self.assertEqual(
+            manage_schedule.get_private_calendar_url(config),
+            "https://calendar.google.com/calendar/r?cid=abc123%40group.calendar.google.com",
+        )
+
+    def test_explicit_url_overrides_calendar_id(self):
+        config = {'google.calendar': {'calendar_id': 'abc', 'private_calendar_url': 'https://example.org/cal'}}
+        self.assertEqual(manage_schedule.get_private_calendar_url(config), 'https://example.org/cal')
+
+    def test_missing_returns_none(self):
+        self.assertIsNone(manage_schedule.get_private_calendar_url({'google.calendar': {}}))
+        self.assertIsNone(manage_schedule.get_private_calendar_url({}))
+
+
 if __name__ == '__main__':
     unittest.main()

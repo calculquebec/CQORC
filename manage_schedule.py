@@ -7,6 +7,7 @@ import csv
 import html
 import io
 import smtplib
+import urllib.parse
 import pytz
 from datetime import datetime, date, timedelta
 from email.message import EmailMessage
@@ -902,6 +903,23 @@ def get_trainer_firstname(trainers, key, fallback):
         except Exception:
             pass
     return (fallback or '').split()[0] if fallback else fallback
+
+
+def get_private_calendar_url(global_config):
+    """
+    Returns a link to the private Google Calendar, for inclusion in emails.
+    Uses [google.calendar] private_calendar_url if set, otherwise builds a
+    link from calendar_id that opens (and offers to add) the calendar in
+    Google Calendar. Returns None if neither is configured.
+    """
+    cal_config = global_config['google.calendar'] if 'google.calendar' in global_config else {}
+    url = cal_config.get('private_calendar_url', '').strip()
+    if url:
+        return url
+    calendar_id = cal_config.get('calendar_id', '').strip()
+    if not calendar_id:
+        return None
+    return "https://calendar.google.com/calendar/r?cid=" + urllib.parse.quote(calendar_id, safe='')
 
 
 def send_schedule_email(global_config, to_email, subject, body_text, html_body=None, verbose=False):
@@ -2288,24 +2306,36 @@ def action_person_schedule(args, global_config):
         table_text = format_person_schedule_text_table(header, rows)
         table_html = format_person_schedule_html_table(header, rows)
         firstname = get_trainer_firstname(trainers, trainer_key, display_name)
-        intro = (
+        intro_before = (
             "Tu trouveras ton horaire de formation dans le tableau plus bas. "
-            "Pour t'aider, tu peux utiliser l'agenda « Formations CQ - Privé » "
-            "dans ton calendrier Google où un horaire tentatif y a été créé. "
+            "Pour t'aider, tu peux utiliser l'agenda « "
+        )
+        calendar_name = "Formations CQ - Privé"
+        intro_after = (
+            " » dans ton calendrier Google où un horaire tentatif y a été créé. "
             "STP me contacter par Slack pour me dire si tout est beau ou s'il "
             "y a un conflit avec ton horaire."
         )
+        calendar_url = get_private_calendar_url(global_config)
+        if calendar_url:
+            # Plain text can't hold a link on a word, so the URL follows the name.
+            intro_text = f"{intro_before}{calendar_name} ({calendar_url}){intro_after}"
+            calendar_html = f'<a href="{html.escape(calendar_url)}">{html.escape(calendar_name)}</a>'
+        else:
+            intro_text = f"{intro_before}{calendar_name}{intro_after}"
+            calendar_html = html.escape(calendar_name)
+        intro_html = f"{html.escape(intro_before)}{calendar_html}{html.escape(intro_after)}"
         footer = "(Ceci est un message envoyé par un script automatisé)"
         body_text = (
             f"Bonjour {firstname},\n\n"
-            f"{intro}\n\n"
+            f"{intro_text}\n\n"
             f"{table_text}\n\n"
             f"{footer}\n"
         )
         body_html = (
             '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;">'
             f"<p>Bonjour {html.escape(firstname)},</p>"
-            f"<p>{html.escape(intro)}</p>"
+            f"<p>{intro_html}</p>"
             f"{table_html}"
             f'<p style="color:#666;font-size:12px;">{html.escape(footer)}</p>'
             "</div>"
