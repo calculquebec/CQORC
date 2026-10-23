@@ -2172,7 +2172,9 @@ def action_person_schedule(args, global_config):
         intro = (
             "Tu trouveras ton horaire de formation dans le tableau plus bas. "
             "Pour t'aider, tu peux utiliser l'agenda « Formations CQ - Privé » "
-            "dans ton calendrier Google où un horaire tentatif y a été créé."
+            "dans ton calendrier Google où un horaire tentatif y a été créé. "
+            "STP me contacter par Slack pour me dire si tout est beau ou s'il "
+            "y a un conflit avec ton horaire."
         )
         footer = "(Ceci est un message envoyé par un script automatisé)"
         body_text = (
