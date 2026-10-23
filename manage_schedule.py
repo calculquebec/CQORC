@@ -4,9 +4,13 @@ import sys
 import re
 import argparse
 import csv
+import html
 import io
+import smtplib
 import pytz
 from datetime import datetime, date, timedelta
+from email.message import EmailMessage
+from email.utils import formataddr
 
 import CQORCcalendar
 import interfaces.google.GCalInterface as GCalInterface
@@ -845,6 +849,110 @@ def get_trainer_info(trainers, key):
     return key, ''
 
 
+def person_matches(trainer_key, name_arg, trainers):
+    """
+    Returns True if trainer_key refers to the same person as name_arg.
+    Matches by trainer database key (case-insensitive) or, when a trainers
+    database is available, by full name (case-insensitive).
+    """
+    name_arg_norm = name_arg.strip().lower()
+    if trainer_key.strip().lower() == name_arg_norm:
+        return True
+    if trainers:
+        fullname, _ = get_trainer_info(trainers, trainer_key)
+        if fullname.strip().lower() == name_arg_norm:
+            return True
+    return False
+
+
+def get_trainer_email(trainers, key):
+    """
+    Returns the trainer's primary email address (for notifications), or ''
+    if unavailable. Matches by trainer database key, case-insensitively.
+    """
+    if not trainers or not key:
+        return ''
+    try:
+        return trainers.email(key)
+    except Exception:
+        pass
+    try:
+        for k in trainers.trainers():
+            if k.lower() == key.strip().lower():
+                return trainers.email(k)
+    except Exception:
+        pass
+    return ''
+
+
+def get_trainer_firstname(trainers, key, fallback):
+    """
+    Returns the trainer's first name from the trainers database (matching by
+    key, case-insensitively), or the first word of `fallback` if unavailable.
+    """
+    if trainers and key:
+        try:
+            return trainers.firstname(key).strip()
+        except Exception:
+            pass
+        try:
+            for k in trainers.trainers():
+                if k.lower() == key.strip().lower():
+                    return trainers.firstname(k).strip()
+        except Exception:
+            pass
+    return (fallback or '').split()[0] if fallback else fallback
+
+
+def send_schedule_email(global_config, to_email, subject, body_text, html_body=None, verbose=False):
+    """
+    Sends an email using the Gmail SMTP credentials configured in [email]
+    (user/password) -- see secrets.cfg.sample / README.md.
+
+    body_text is always sent as the plain-text part. When html_body is also
+    given, the message becomes multipart/alternative so HTML-capable clients
+    render html_body instead (plain text in most email clients uses a
+    proportional font, which breaks space-aligned ASCII tables).
+
+    Returns True on success, prints an error and returns False on failure.
+    """
+    try:
+        # Strip whitespace and any accidental surrounding quotes -- configparser
+        # does not treat quotes specially, so "user = \"foo@bar.com\"" in a .cfg
+        # file yields the literal quote characters in the value.
+        gmail_user = global_config['email']['user'].strip().strip('"\'')
+        gmail_password = global_config['email']['password'].strip().strip('"\'')
+    except Exception as e:
+        print(f"Error: could not read [email] user/password from configuration: {e}")
+        return False
+
+    # Optional display name shown as the sender (e.g. "Caroline Baril"), while
+    # still authenticating and sending through the configured mailbox address.
+    from_name = global_config['email'].get('from_name', '').strip().strip('"\'')
+
+    msg = EmailMessage()
+    msg['Subject'] = subject
+    msg['From'] = formataddr((from_name, gmail_user)) if from_name else gmail_user
+    msg['To'] = to_email
+    msg.set_content(body_text)
+    if html_body:
+        msg.add_alternative(html_body, subtype='html')
+
+    try:
+        with smtplib.SMTP('smtp.gmail.com', 587, timeout=20) as server:
+            server.ehlo()
+            server.starttls()
+            server.ehlo()
+            server.login(gmail_user, gmail_password)
+            server.send_message(msg)
+        if verbose:
+            print(f"  Email sent to {to_email}.")
+        return True
+    except Exception as e:
+        print(f"Error sending email to {to_email}: {type(e).__name__}: {e}")
+        return False
+
+
 def compute_role_summary(sessions, roles=None, trainers=None):
     """
     Computes summary statistics for role involvement across course sessions.
@@ -1442,6 +1550,19 @@ def intervals_overlap(start1, end1, start2, end2):
     return start1 < end2 and start2 < end1
 
 
+# Human-friendly French labels for role column names (e.g. 'instructor' -> 'Formateur')
+ROLE_LABELS = {
+    'instructor': 'Formateur',
+    'host': 'Hôte',
+    'assistants': 'Assistant',
+}
+
+
+def role_label(role):
+    """Returns a human-friendly label for a role column name."""
+    return ROLE_LABELS.get(role, role.capitalize())
+
+
 def collect_session_assignments(sessions, roles=None):
     """
     Extract trainer assignments from sessions.
@@ -1845,6 +1966,239 @@ def action_check_conflicts(args, global_config):
 
 
 # ---------------------------------------------------------------------------
+# Action: Person Schedule
+# ---------------------------------------------------------------------------
+def build_person_schedule_table_data(assignments):
+    """
+    Converts a list of assignment dicts (from collect_session_assignments,
+    already filtered down to a single person) into (header, rows), sorted
+    chronologically by start date.
+    """
+    header = ['Date', 'Titre', 'Rôle']
+    rows = []
+    for a in sorted(assignments, key=lambda x: (x['start_date'], x['course_id'])):
+        try:
+            dt = parse_datetime(a['start_date'])
+        except Exception:
+            dt = None
+        date_str = dt.strftime('%Y-%m-%d') if dt else a['start_date']
+        rows.append([date_str, (a['title'] or '')[:70], role_label(a['role'])])
+    return header, rows
+
+
+def group_assignments_by_person(assignments, trainers=None):
+    """
+    Groups assignments by trainer_key.
+
+    Returns a list of (display_name, trainer_key, assignments_for_person)
+    tuples, sorted alphabetically by display name (case-insensitive).
+    display_name is the trainer's full name when available in the trainers
+    database, otherwise the raw trainer_key.
+    """
+    groups = {}
+    for a in assignments:
+        groups.setdefault(a['trainer_key'], []).append(a)
+
+    result = []
+    for tk, items in groups.items():
+        fullname, _ = get_trainer_info(trainers, tk)
+        display_name = fullname if fullname and fullname != tk else tk
+        result.append((display_name, tk, items))
+
+    result.sort(key=lambda x: x[0].lower())
+    return result
+
+
+def format_person_schedule_text_table(header, rows, title=None):
+    """
+    Formats the person-schedule data as an ASCII text table.
+    """
+    all_rows = [header] + rows
+    col_widths = [max(len(str(r[i])) for r in all_rows) for i in range(len(header))]
+    fmt = "  ".join(f"{{:<{w}}}" for w in col_widths)
+    total_width = sum(col_widths) + 2 * (len(col_widths) - 1)
+
+    lines = []
+    if title:
+        lines.append(title)
+        lines.append("=" * max(len(title), total_width))
+
+    lines.append(fmt.format(*header))
+    lines.append("  ".join(["-" * w for w in col_widths]))
+    for r in rows:
+        lines.append(fmt.format(*r))
+    lines.append("=" * total_width)
+    return "\n".join(lines)
+
+
+def format_person_schedule_csv(header, rows):
+    """Formats a single person's schedule data as CSV text."""
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(header)
+    for r in rows:
+        writer.writerow(r)
+    return output.getvalue()
+
+
+def format_person_schedule_html_table(header, rows):
+    """
+    Formats a single person's schedule data as an HTML table, with inline
+    styles so it renders consistently in email clients (which generally
+    render plain text in a proportional font, breaking space-aligned ASCII
+    tables, and often strip <style> blocks).
+    """
+    cell_style = "border:1px solid #ccc;padding:6px 10px;text-align:left;"
+    head_style = cell_style + "background:#f0f0f0;font-weight:bold;"
+
+    thead = "".join(f'<th style="{head_style}">{html.escape(str(h))}</th>' for h in header)
+    body_rows = []
+    for r in rows:
+        cells = "".join(f'<td style="{cell_style}">{html.escape(str(c))}</td>' for c in r)
+        body_rows.append(f"<tr>{cells}</tr>")
+
+    return (
+        '<table style="border-collapse:collapse;font-family:Arial,Helvetica,sans-serif;font-size:14px;">'
+        f"<thead><tr>{thead}</tr></thead>"
+        f"<tbody>{''.join(body_rows)}</tbody>"
+        "</table>"
+    )
+
+
+def format_all_person_schedules_csv(groups):
+    """
+    Formats per-person schedule groups (from group_assignments_by_person) as
+    a single CSV, with a '[ Name ]' banner row and its own header before
+    each person's block, and a blank row separating people.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+    header = ['Date', 'Titre', 'Rôle']
+    for i, (display_name, _tk, items) in enumerate(groups):
+        if i > 0:
+            writer.writerow([])
+        writer.writerow([f"[ {display_name} ]"] + [''] * (len(header) - 1))
+        writer.writerow(header)
+        _, rows = build_person_schedule_table_data(items)
+        for r in rows:
+            writer.writerow(r)
+    return output.getvalue()
+
+
+def action_person_schedule(args, global_config):
+    """
+    Action: build a table of every session a given person is involved in
+    (as instructor/trainer, host, or assistant), showing the date, course
+    and role held for each.
+    """
+    sheet_name = (
+        getattr(args, 'sheet', None)
+        or global_config['google'].get('calendar_sheet_name')
+    )
+    if not sheet_name:
+        print("Error: --sheet must be specified (or google.calendar_sheet_name set in config).")
+        sys.exit(1)
+
+    name_arg = getattr(args, 'name', None)
+    email_requested = getattr(args, 'email', False)
+    if email_requested and not name_arg:
+        print("Error: --email requires --name (pick a single trainer to email their schedule to).")
+        sys.exit(1)
+
+    roles_arg = getattr(args, 'roles', 'instructor,host,assistants')
+    roles = [r.strip().lower() for r in roles_arg.split(',') if r.strip()]
+    csv_arg = getattr(args, 'csv', None)
+    quiet = (csv_arg == '-')   # suppress stdout status lines when streaming CSV
+
+    if not quiet:
+        who = f"Name: '{name_arg}'" if name_arg else "all trainers"
+        print(f"Action: person-schedule (Sheet: '{sheet_name}', {who})")
+
+    try:
+        calendar = CQORCcalendar.Calendar(global_config, args, sheet_name=sheet_name)
+    except Exception as e:
+        print(f"Error loading sheet '{sheet_name}': {e}")
+        sys.exit(1)
+
+    sessions = calendar.get_all_sessions()
+    trainers = load_trainers(global_config, args)
+
+    assignments = collect_session_assignments(sessions, roles=roles)
+
+    if name_arg:
+        # Single person: one table.
+        matches = [a for a in assignments if person_matches(a['trainer_key'], name_arg, trainers)]
+        if not matches:
+            print(f"No sessions found for '{name_arg}' in sheet '{sheet_name}'.")
+            return
+        fullname, _ = get_trainer_info(trainers, matches[0]['trainer_key'])
+        display_name = fullname if fullname and fullname != matches[0]['trainer_key'] else name_arg
+        groups = [(display_name, matches[0]['trainer_key'], matches)]
+    else:
+        # No --name: everyone, as independent tables.
+        if not assignments:
+            print(f"No assignments found in sheet '{sheet_name}'.")
+            return
+        groups = group_assignments_by_person(assignments, trainers)
+
+    if quiet:
+        sys.stdout.write(format_all_person_schedules_csv(groups))
+    else:
+        for display_name, _tk, items in groups:
+            header, rows = build_person_schedule_table_data(items)
+            title = f"Horaire de {display_name} — Feuille « {sheet_name} » ({len(rows)} séance{'s' if len(rows) != 1 else ''})"
+            print("\n" + format_person_schedule_text_table(header, rows, title=title))
+
+        if csv_arg:
+            csv_text = format_all_person_schedules_csv(groups)
+            try:
+                with open(csv_arg, 'w', newline='', encoding='utf-8') as f:
+                    f.write(csv_text)
+                print(f"\nSchedule exported to CSV file '{csv_arg}'.")
+            except Exception as e:
+                print(f"\nError exporting to CSV file '{csv_arg}': {e}")
+
+    if email_requested:
+        display_name, trainer_key, items = groups[0]
+        to_email = get_trainer_email(trainers, trainer_key)
+        if not to_email:
+            print(f"Error: no email address found for '{display_name}' in the trainers database.")
+            sys.exit(1)
+
+        header, rows = build_person_schedule_table_data(items)
+        table_text = format_person_schedule_text_table(header, rows)
+        table_html = format_person_schedule_html_table(header, rows)
+        firstname = get_trainer_firstname(trainers, trainer_key, display_name)
+        intro = (
+            "Tu trouveras ton horaire de formation dans le tableau plus bas. "
+            "Pour t'aider, tu peux utiliser l'agenda « Formations CQ - Privé » "
+            "dans ton calendrier Google où un horaire tentatif y a été créé."
+        )
+        footer = "(Ceci est un message envoyé par un script automatisé)"
+        body_text = (
+            f"Bonjour {firstname},\n\n"
+            f"{intro}\n\n"
+            f"{table_text}\n\n"
+            f"{footer}\n"
+        )
+        body_html = (
+            '<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;">'
+            f"<p>Bonjour {html.escape(firstname)},</p>"
+            f"<p>{html.escape(intro)}</p>"
+            f"{table_html}"
+            f'<p style="color:#666;font-size:12px;">{html.escape(footer)}</p>'
+            "</div>"
+        )
+        subject = f"Horaire — Session {sheet_name}"
+
+        print(f"\nEnvoi de l'horaire par courriel à {display_name} <{to_email}>...")
+        if send_schedule_email(global_config, to_email, subject, body_text, html_body=body_html, verbose=getattr(args, 'verbose', False)):
+            print(f"Courriel envoyé à {to_email}.")
+        else:
+            sys.exit(1)
+
+
+# ---------------------------------------------------------------------------
 # CLI Entry Point
 # ---------------------------------------------------------------------------
 def main():
@@ -1854,8 +2208,8 @@ def main():
     # Global options / Top-level fallback flags
     parser.add_argument(
         "--action",
-        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar", "summary", "role-summary", "roles-summary", "check-conflicts"],
-        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar, summary, check-conflicts)"
+        choices=["create-sheet", "sync-to-calendar", "sync-from-calendar", "clear-calendar", "summary", "role-summary", "roles-summary", "check-conflicts", "person-schedule"],
+        help="Action to execute (create-sheet, sync-to-calendar, sync-from-calendar, clear-calendar, summary, check-conflicts, person-schedule)"
     )
     parser.add_argument(
         "--sheet",
@@ -1890,6 +2244,17 @@ def main():
         "--roles",
         default="instructor,host,assistants",
         help="Comma-separated roles for summary (default: instructor,host,assistants)"
+    )
+    parser.add_argument(
+        "--name",
+        default=None,
+        help="Trainer key or full name to look up (person-schedule)"
+    )
+    parser.add_argument(
+        "--email",
+        action="store_true",
+        default=False,
+        help="Email the schedule to the trainer's own address (person-schedule; requires --name)"
     )
     parser.add_argument(
         "--sort-by",
@@ -2018,6 +2383,20 @@ def main():
     p_conflicts.add_argument("--config_dir", default=".", help="Config dir")
     p_conflicts.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
 
+    # Subcommand: person-schedule
+    p_person = subparsers.add_parser(
+        "person-schedule",
+        help="List every session a given person is involved in (as trainer/host/assistant), with date, course and role; omit --name to list everyone"
+    )
+    p_person.add_argument("--name", default=None, help="Trainer key or full name to look up (omit to list everyone)")
+    p_person.add_argument("--email", action="store_true", default=False, help="Email the schedule to the trainer's own address (requires --name)")
+    p_person.add_argument("--sheet", default=None, help="Sheet name (default: calendar_sheet_name in config)")
+    p_person.add_argument("--roles", default="instructor,host,assistants", help="Comma-separated roles to check (default: instructor,host,assistants)")
+    p_person.add_argument("--csv", default=None, help="Export schedule to CSV file (or '-' for stdout)")
+    p_person.add_argument("-v", "--verbose", action="store_true", default=False, help="Verbose output")
+    p_person.add_argument("--config_dir", default=".", help="Config dir")
+    p_person.add_argument("--secrets_dir", default="./secrets", help="Secrets dir")
+
     args = parser.parse_args()
 
     # Determine action
@@ -2050,6 +2429,8 @@ def main():
         action_summary(args, global_config)
     elif action == "check-conflicts":
         action_check_conflicts(args, global_config)
+    elif action == "person-schedule":
+        action_person_schedule(args, global_config)
     else:
         print(f"Unknown action: {action}")
         sys.exit(1)
