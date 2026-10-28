@@ -21,7 +21,7 @@ parser.add_argument("--messages", default=False, action='store_true', help="Upda
 parser.add_argument("--wipe-messages", default=False, action='store_true', help="Wipe scheduled messages from channel")
 parser.add_argument("--list-messages", default=False, action='store_true', help="List scheduled messages from channel")
 parser.add_argument("--archive", default=False, action='store_true', help="Archive channel")
-parser.add_argument("--additional-slack-invite", default=None, help="Email of an additional attendee in slack channel")
+parser.add_argument("--additional-slack-invite", nargs='+', default=[], help="Emails of additional attendees in slack channel")
 parser.add_argument("--dry-run", default=False, action='store_true', help="Dry-run")
 args = parser.parse_args()
 
@@ -96,8 +96,8 @@ for course in courses:
 
         if args.invites:
             attendees = [trainers.slack_email(key) for key in get_trainer_keys(course, ['instructor', 'host', 'assistants', 'equipe_techno'])]
-            if args.additional_slack_invite:
-                additional_email = args.additional_slack_invite.lower()
+            for additional_email in args.additional_slack_invite:
+                additional_email = additional_email.lower()
                 if additional_email not in attendees:
                     attendees.append(additional_email)
             if args.dry_run:
