@@ -448,9 +448,32 @@ def upload_certificates_to_gdrive(certificate_dir, gdrive, global_config, dry_ru
         return
 
     print(f"--- Uploading PDFs to Google Drive folder {google_drive_url} ---")
+    drive_files = gdrive.get_service().files()
+    existing_names = set()
+    page_token = None
+    escaped_folder_id = folder_id.replace('\\', '\\\\').replace("'", "\\'")
+    while True:
+        result = drive_files.list(
+            q=f"'{escaped_folder_id}' in parents and trashed = false and mimeType = 'application/pdf'",
+            fields='nextPageToken, files(name)',
+            pageSize=1000,
+            pageToken=page_token,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
+        ).execute()
+        existing_names.update(file['name'] for file in result.get('files', []))
+        page_token = result.get('nextPageToken')
+        if not page_token:
+            break
+
     uploaded = 0
+    skipped = 0
     for file_path in files_to_upload:
         file_name = os.path.basename(file_path)
+        if file_name in existing_names:
+            skipped += 1
+            print(f"Skipped (already in Google Drive): {file_name}")
+            continue
         media = MediaFileUpload(file_path, mimetype='application/pdf', resumable=False)
         drive_file = (
             gdrive.get_service()
@@ -465,10 +488,11 @@ def upload_certificates_to_gdrive(certificate_dir, gdrive, global_config, dry_ru
         )
 
         gdrive.move_file_to_folder(drive_file['id'], folder_id)
+        existing_names.add(file_name)
         uploaded += 1
         print(f"Uploaded: {file_name}")
 
-    print(f"Upload complete: {uploaded} file(s) transferred to Google Drive.")
+    print(f"Upload complete: {uploaded} file(s) transferred to Google Drive, {skipped} already present.")
     
 
 if __name__ == '__main__':
