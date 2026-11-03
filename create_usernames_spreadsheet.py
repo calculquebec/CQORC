@@ -111,8 +111,18 @@ new_file_name = eval('f' + repr(filename_template))
 
 # create or update the spreadsheet
 source_file_id = config.get("template_%s" % locale, config["template_en"])
+existing_sheet_ids = gdrive.get_file_ids(config['google_drive_folder_id'], new_file_name)
+if existing_sheet_ids is None:
+    print("Impossible de vérifier si le spreadsheet existe dans Google Drive.")
+    exit(1)
+if existing_sheet_ids and not args.update:
+    print("Le spreadsheet existe déjà. Pour le mettre à jour, utiliser --update.")
+    exit(0)
 if args.update:
-    sheet_id = gdrive.get_file_id(config['google_drive_folder_id'], new_file_name)
+    if len(existing_sheet_ids) != 1:
+        print(f"Impossible de mettre à jour : {len(existing_sheet_ids)} spreadsheets trouvés pour '{new_file_name}', attendu exactement 1.")
+        exit(1)
+    sheet_id = existing_sheet_ids[0]
 elif args.dry_run:
     print(f"Dry-run: would copy template to '{new_file_name}' in Google Drive folder {config['google_drive_folder_id']}")
     sheet_id = None
@@ -179,7 +189,10 @@ else:
     # slack.post_to_channel(channel_name, message, post_time)
 
 # add a bookmark
-if args.update:
-    slack.update_channel_bookmarks(channel_name, [{"title": "Username spreadsheet", "link": sheet_url}])
-else:
-    slack.add_bookmark_to_channel(channel_name, "Username spreadsheet", sheet_url)
+if not args.dry_run:
+    if args.update:
+        slack.update_channel_bookmarks(channel_name, [{"title": "Username spreadsheet", "link": sheet_url}])
+    elif slack.get_channel_bookmark_link(channel_name, "Username spreadsheet"):
+        print("Le bookmark Slack 'Username spreadsheet' existe déjà, il n'a pas été recréé.")
+    else:
+        slack.add_bookmark_to_channel(channel_name, "Username spreadsheet", sheet_url)
