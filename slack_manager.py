@@ -78,6 +78,8 @@ for course in courses:
 
         post_mortem_link = config['slack']['post_mortem_link']
         eb_course_link = config['slack']['eb_course_link']
+        result_survey_link_fr = config['slack']['result_survey_link_fr']
+        result_survey_link_en = config['slack']['result_survey_link_en']                      
 
         # if is documented, use that, otherwise create it
         slack_channel_name = first_session['slack_channel']
@@ -125,6 +127,16 @@ for course in courses:
                 bookmarks += [{'title': 'Survey', 'link': survey_link}]
             if post_mortem_link:
                 bookmarks += [{'title': 'Post Mortem des formations', 'link': post_mortem_link}]
+            if (locale or '').strip().lower().startswith('fr') and result_survey_link_fr:
+                bookmarks.append({
+                    'title': 'Résultats du sondage',
+                    'link': result_survey_link_fr,
+                })
+            elif (locale or '').strip().lower().startswith('en') and result_survey_link_en:
+                bookmarks.append({
+                    'title': 'Survey Results',
+                    'link': result_survey_link_en,
+                })
             if eb_course_link:
                 bookmarks += [{'title': 'Liens à partager vers nos prochaines formations', 'link': eb_course_link}]
             if args.dry_run:
