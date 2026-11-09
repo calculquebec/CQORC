@@ -20,8 +20,8 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
-import interfaces.eventbrite.EventbriteInterface as Eventbrite
-import interfaces.google.GDriveInterface as GDriveInterface
+import cqorc_interfaces.eventbrite.EventbriteInterface as Eventbrite
+import cqorc_interfaces.google.GDriveInterface as GDriveInterface
 import CQORCcalendar
 from googleapiclient.http import MediaFileUpload
 

@@ -1,8 +1,1 @@
-google-api-core==2.*
-google-api-python-client==2.*
-google-auth==2.*
-google-auth-httplib2
-google-auth-oauthlib
-googleapis-common-protos
-oauth2client==4.*
-pytz
+cqorc_interfaces[google] @ git+https://github.com/calculquebec/cqorc_interfaces.git@v0.1.1

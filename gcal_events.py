@@ -1,7 +1,7 @@
 #!/bin/env python3
 import os, argparse
 
-import interfaces.google.GCalInterface as GCalInterface
+import cqorc_interfaces.google.GCalInterface as GCalInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title

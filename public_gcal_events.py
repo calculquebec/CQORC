@@ -1,8 +1,8 @@
 #!/bin/env python3
 import os, argparse, datetime, itertools
 
-import interfaces.google.GCalInterface as GCalInterface
-import interfaces.eventbrite.EventbriteInterface as Eventbrite
+import cqorc_interfaces.google.GCalInterface as GCalInterface
+import cqorc_interfaces.eventbrite.EventbriteInterface as Eventbrite
 import yaml
 import CQORCcalendar
 import re

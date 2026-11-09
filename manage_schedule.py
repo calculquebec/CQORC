@@ -14,7 +14,7 @@ from email.message import EmailMessage
 from email.utils import formataddr
 
 import CQORCcalendar
-import interfaces.google.GCalInterface as GCalInterface
+import cqorc_interfaces.google.GCalInterface as GCalInterface
 from common import get_config, get_title, Trainers
 
 # Columns whose values must be kept intact from the source session

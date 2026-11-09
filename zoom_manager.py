@@ -2,7 +2,7 @@
 import os, argparse, datetime
 import pprint
 
-import interfaces.zoom.ZoomInterface as ZoomInterface
+import cqorc_interfaces.zoom.ZoomInterface as ZoomInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title

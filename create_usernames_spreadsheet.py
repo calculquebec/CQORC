@@ -2,10 +2,10 @@
 
 import os, argparse, datetime
 
-import interfaces.eventbrite.EventbriteInterface as Eventbrite
-import interfaces.google.GDriveInterface as GDriveInterface
-import interfaces.google.GSheetsInterface as GSheetsInterface
-import interfaces.slack.SlackInterface as SlackInterface
+import cqorc_interfaces.eventbrite.EventbriteInterface as Eventbrite
+import cqorc_interfaces.google.GDriveInterface as GDriveInterface
+import cqorc_interfaces.google.GSheetsInterface as GSheetsInterface
+import cqorc_interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title

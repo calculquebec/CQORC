@@ -1,4 +1,4 @@
-eventbrite>=3.3.5
+cqorc_interfaces[eventbrite] @ git+https://github.com/calculquebec/cqorc_interfaces.git@v0.1.1
 beautifulsoup4
 requests>=2.28.2
 pyyaml

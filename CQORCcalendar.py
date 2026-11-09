@@ -1,5 +1,5 @@
 import os
-import interfaces.google.GSheetsInterface as GSheetsInterface
+import cqorc_interfaces.google.GSheetsInterface as GSheetsInterface
 
 class Calendar:
     def __init__(self, global_config, args, sheet_name=None):
