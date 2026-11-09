@@ -2,7 +2,7 @@ import os
 import interfaces.google.GSheetsInterface as GSheetsInterface
 
 class Calendar:
-    def __init__(self, global_config, args):
+    def __init__(self, global_config, args, sheet_name=None):
         # take the credentials file either from google section
         credentials_file = global_config['google']['credentials_file']
         secrets_dir = os.environ.get('CQORC_SECRETS_DIR', args.secrets_dir)
@@ -12,8 +12,12 @@ class Calendar:
         self.gsheets = GSheetsInterface.GSheetsInterface(credentials_file_path)
 
         self.spreadsheet_id = global_config['google']['calendar_file']
-        self.sheet_name = global_config['google']['calendar_sheet_name']
+        self.sheet_name = sheet_name or getattr(args, 'sheet_name', None) or getattr(args, 'from_sheet', None) or global_config['google']['calendar_sheet_name']
         list_of_sessions = self.gsheets.get_values(self.spreadsheet_id, "A:Z", self.sheet_name)
+        if isinstance(list_of_sessions, Exception):
+            raise RuntimeError(f"Failed to read sheet '{self.sheet_name}': {list_of_sessions}")
+        if not list_of_sessions:
+            raise RuntimeError(f"Sheet '{self.sheet_name}' is empty or does not exist.")
 
         self.header = list_of_sessions[0]
         sessions = [{self.header[i]: item[i] if i < len(item) else None for i in range(len(self.header))} for item in list_of_sessions[1:]]
@@ -64,12 +68,23 @@ class Calendar:
             if session['start_date'] == session_start_date:
                 session[gcal_id_type] = gcal_id
 
-    def update_spreadsheet(self):
+    def set_sessions(self, sessions):
+        self.courses = {}
+        for session in sessions:
+            course_id = session.get('course_id')
+            if course_id not in self.courses:
+                self.courses[course_id] = {'sessions': []}
+            self.courses[course_id]['sessions'].append(session)
+
+    def update_spreadsheet(self, sheet_name=None, clear=False):
         values = [self.header]
         for course in self.courses.values():
             for session in course['sessions']:
-                session_line = [session[k] for k in self.header]
+                session_line = [session.get(k) if session.get(k) is not None else "" for k in self.header]
                 values += [session_line]
 
-        self.gsheets.update_values(self.spreadsheet_id, "A:Z", values, self.sheet_name)
+        target_sheet = sheet_name or self.sheet_name
+        if clear:
+            self.gsheets.clear_values(self.spreadsheet_id, "A:Z", target_sheet)
+        self.gsheets.update_values(self.spreadsheet_id, "A:Z", values, target_sheet)
 

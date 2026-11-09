@@ -12,7 +12,7 @@ from googleapiclient.errors import HttpError
 
 class GCalInterface(GoogleInterface):
     def __init__(self, key_file, calendar_id, timezone = "America/Montreal", credentials_type='user'):
-        super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events'])
+        super(GCalInterface, self).__init__(key_file, credentials_type, 'calendar', 'v3', ['https://www.googleapis.com/auth/calendar.events', 'https://www.googleapis.com/auth/calendar.events.freebusy'])
         self.logger = logging.getLogger(__name__)
         self.calendar_id = calendar_id
         self.timezone = timezone
@@ -23,9 +23,12 @@ class GCalInterface(GoogleInterface):
         try:
             event = self.get_service().events().get(calendarId=self.calendar_id, eventId=event_id).execute()
             return event
-
         except HttpError as error:
+            if error.resp.status in [404, 410]:
+                self.logger.info(f"Event {event_id} not found or deleted (status {error.resp.status})")
+                return None
             self.logger.error('An error occurred: %s' % error)
+            raise error
 
 
     def get_events(self, start_time, limit=10, end_time=None):
@@ -63,7 +66,7 @@ class GCalInterface(GoogleInterface):
             self.logger.error('An error occurred: %s' % error)
 
 
-    def create_event(self, start_time, end_time, summary, description, attendees, send_updates="all"):
+    def create_event(self, start_time, end_time, summary, description, attendees=None, send_updates="all", status=None, extended_properties=None):
         # create an event
         # documentation: https://developers.google.com/calendar/api/v3/reference/events/insert
         try:
@@ -75,11 +78,19 @@ class GCalInterface(GoogleInterface):
             event_dict['summary'] = summary
             event_dict['description'] = description
             event_dict['transparency'] = 'opaque'
-            if isinstance(attendees, str):
-                attendees = [{'email': x.strip()} for x in attendees.split(',')]
-            if isinstance(attendees, list) and isinstance(attendees[0], str):
-                attendees = [{'email': x} for x in attendees]
-            event_dict['attendees'] = attendees
+            if status:
+                event_dict['status'] = status
+            if extended_properties:
+                event_dict['extendedProperties'] = extended_properties
+
+            if isinstance(attendees, str) and attendees.strip():
+                attendees = [{'email': x.strip()} for x in attendees.split(',') if x.strip()]
+            elif isinstance(attendees, str):
+                attendees = []
+            if isinstance(attendees, list) and len(attendees) > 0 and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees if x]
+            if attendees:
+                event_dict['attendees'] = attendees
 
             event = self.get_service().events().insert(
                         calendarId=self.calendar_id,
@@ -90,6 +101,39 @@ class GCalInterface(GoogleInterface):
             return event
         except HttpError as error:
             self.logger.error('An error occurred: %s' % error)
+            raise error
+
+
+    def list_all_events(self, time_min=None, time_max=None, q=None):
+        try:
+            events = []
+            page_token = None
+            while True:
+                kwargs = {
+                    'calendarId': self.calendar_id,
+                    'singleEvents': True,
+                    'orderBy': 'startTime',
+                    'maxResults': 250
+                }
+                if time_min:
+                    kwargs['timeMin'] = time_min
+                if time_max:
+                    kwargs['timeMax'] = time_max
+                if q:
+                    kwargs['q'] = q
+                if page_token:
+                    kwargs['pageToken'] = page_token
+
+                events_result = self.get_service().events().list(**kwargs).execute()
+                events.extend(events_result.get('items', []))
+                page_token = events_result.get('nextPageToken')
+                if not page_token:
+                    break
+            return events
+        except HttpError as error:
+            self.logger.error('An error occurred: %s' % error)
+            raise error
+
 
 
     def update_event(self, event_id, start_time=None, end_time=None, summary=None, description=None, attendees=None, send_updates="all"):
@@ -105,11 +149,14 @@ class GCalInterface(GoogleInterface):
             if description: event['description'] = description
             event['transparency'] = 'opaque'
 
-            if isinstance(attendees, str):
-                attendees = [{'email': x.strip()} for x in attendees.split(',')]
-            if isinstance(attendees, list) and isinstance(attendees[0], str):
-                attendees = [{'email': x} for x in attendees]
-            if attendees: event['attendees'] = attendees
+            if isinstance(attendees, str) and attendees.strip():
+                attendees = [{'email': x.strip()} for x in attendees.split(',') if x.strip()]
+            elif isinstance(attendees, str):
+                attendees = []
+            if isinstance(attendees, list) and len(attendees) > 0 and isinstance(attendees[0], str):
+                attendees = [{'email': x} for x in attendees if x]
+            if attendees is not None:
+                event['attendees'] = attendees
 
             event = self.get_service().events().update(
                         calendarId=self.calendar_id,
@@ -145,6 +192,34 @@ class GCalInterface(GoogleInterface):
             self.logger.info(f"Event deleted: {event_id}")
         except HttpError as error:
             self.logger.error('An error occurred: %s' % error)
+
+
+    def get_freebusy(self, time_min, time_max, emails):
+        """
+        Query the FreeBusy API for one or more calendar email addresses.
+
+        Args:
+            time_min: ISO 8601 string for the start of the query range (UTC or with offset).
+            time_max: ISO 8601 string for the end of the query range (UTC or with offset).
+            emails: list of calendar email addresses to query.
+
+        Returns:
+            dict mapping email -> {'busy': [{'start':..., 'end':...}], 'errors': [...]}
+            as returned by the Google Calendar FreeBusy API.
+        """
+        # documentation: https://developers.google.com/calendar/api/v3/reference/freebusy/query
+        body = {
+            "timeMin": time_min,
+            "timeMax": time_max,
+            "items": [{"id": email} for email in emails],
+            "timeZone": "UTC",
+        }
+        try:
+            result = self.get_service().freebusy().query(body=body).execute()
+            return result.get('calendars', {})
+        except HttpError as error:
+            self.logger.error('FreeBusy query error: %s' % error)
+            raise error
 
 
 def main():
