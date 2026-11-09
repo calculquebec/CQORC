@@ -1,4 +1,8 @@
 import os
+from common import check_cqorc_interfaces_version
+
+check_cqorc_interfaces_version()
+
 import cqorc_interfaces.google.GSheetsInterface as GSheetsInterface
 
 class Calendar:

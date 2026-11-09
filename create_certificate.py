@@ -20,12 +20,14 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 
+from common import check_cqorc_interfaces_version, get_config
+
+check_cqorc_interfaces_version()
+
 import cqorc_interfaces.eventbrite.EventbriteInterface as Eventbrite
 import cqorc_interfaces.google.GDriveInterface as GDriveInterface
 import CQORCcalendar
 from googleapiclient.http import MediaFileUpload
-
-from common import get_config
 
 ATTESTATION_CQ_TEMPLATE = "Attestation_CQ_{}_{}_{}.pdf"
 

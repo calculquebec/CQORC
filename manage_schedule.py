@@ -13,9 +13,12 @@ from datetime import datetime, date, timedelta
 from email.message import EmailMessage
 from email.utils import formataddr
 
+from common import check_cqorc_interfaces_version, get_config, get_title, Trainers
+
+check_cqorc_interfaces_version()
+
 import CQORCcalendar
 import cqorc_interfaces.google.GCalInterface as GCalInterface
-from common import get_config, get_title, Trainers
 
 # Columns whose values must be kept intact from the source session
 KEEP_COLUMNS = {

@@ -1,5 +1,8 @@
 #!/bin/env python3
 import os, argparse, datetime, itertools
+from common import check_cqorc_interfaces_version
+
+check_cqorc_interfaces_version()
 
 import cqorc_interfaces.google.GCalInterface as GCalInterface
 import cqorc_interfaces.eventbrite.EventbriteInterface as Eventbrite

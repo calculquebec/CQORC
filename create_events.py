@@ -7,6 +7,10 @@ from git import Repo
 from bs4 import BeautifulSoup
 import configparser
 from glob import glob
+from common import check_cqorc_interfaces_version
+
+check_cqorc_interfaces_version()
+
 import cqorc_interfaces.eventbrite.EventbriteInterface as eventbrite
 from common import UTC_FMT, valid_date, to_iso8061, Trainers
 

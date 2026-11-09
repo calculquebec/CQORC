@@ -1,5 +1,8 @@
 #!/bin/env python3
 import os, argparse, datetime
+from common import check_cqorc_interfaces_version
+
+check_cqorc_interfaces_version()
 
 import cqorc_interfaces.zoom.ZoomInterface as ZoomInterface
 import cqorc_interfaces.slack.SlackInterface as SlackInterface

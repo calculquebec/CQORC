@@ -1,6 +1,9 @@
 #!/bin/env python3
 import os, argparse, datetime
 import pprint
+from common import check_cqorc_interfaces_version
+
+check_cqorc_interfaces_version()
 
 import cqorc_interfaces.zoom.ZoomInterface as ZoomInterface
 import CQORCcalendar
