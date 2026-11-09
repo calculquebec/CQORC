@@ -1,1 +1,1 @@
-requests
+cqorc_interfaces[zoom] @ git+https://github.com/calculquebec/cqorc_interfaces.git@v0.1.1

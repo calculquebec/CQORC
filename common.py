@@ -1,11 +1,95 @@
 from datetime import datetime
-import argparse, configparser, os, glob
+import argparse, configparser, os, glob, sys, re
 import urllib
 import yaml
 from git import Repo
 
 ISO_8061_FORMAT = "YYYY-MM-DD[THH:MM:SS[±HH:MM]]"
 UTC_FMT = '%Y-%m-%dT%H:%M:%SZ'
+
+
+def _parse_version(v):
+    return tuple(int(x) for x in v.split(".") if x.isdigit())
+
+
+def get_required_cqorc_interfaces_version():
+    """
+    Extract required cqorc_interfaces versions across all requirements files.
+    If multiple conflicting versions are found across requirements files,
+    warns the user and enforces the maximum version found.
+    """
+    repo_root = os.path.dirname(os.path.abspath(__file__))
+    pattern = re.compile(
+        r"cqorc_interfaces(?:\[[^\]]*\])?\s*(?:@\s*(?:git\+)?.*?@v?|==|>=)\s*([0-9]+(?:\.[0-9]+)*)"
+    )
+    files_to_check = [os.path.join(repo_root, "requirements.txt")] + sorted(
+        glob.glob(os.path.join(repo_root, "requirements", "*.txt"))
+    )
+
+    found_versions = {}
+    for file_path in files_to_check:
+        if os.path.isfile(file_path):
+            with open(file_path, "r") as f:
+                for line in f:
+                    match = pattern.search(line)
+                    if match:
+                        rel_path = os.path.relpath(file_path, repo_root)
+                        found_versions[rel_path] = match.group(1)
+
+    if not found_versions:
+        return None
+
+    unique_versions = set(found_versions.values())
+    if len(unique_versions) > 1:
+        details = "\n".join(f"  - {f}: {v}" for f, v in sorted(found_versions.items()))
+        max_ver = max(unique_versions, key=_parse_version)
+        print(
+            f"\n[WARNING] Inconsistent cqorc_interfaces versions found across requirements files:\n"
+            f"{details}\n"
+            f"Using maximum version '{max_ver}' as requirement.\n",
+            file=sys.stderr,
+        )
+        return max_ver
+
+    return next(iter(unique_versions))
+
+
+def check_cqorc_interfaces_version():
+    """
+    Validate that cqorc_interfaces is installed and matches the required version
+    specified in requirements files. Prompts the user with update instructions if not met.
+    """
+    required = get_required_cqorc_interfaces_version()
+    if not required:
+        return
+
+    try:
+        import cqorc_interfaces
+        installed = getattr(cqorc_interfaces, "__version__", None)
+        if installed is None:
+            from importlib.metadata import version
+            installed = version("cqorc_interfaces")
+    except Exception:
+        print(
+            f"\n[ERROR] cqorc_interfaces is not installed (required version: {required}).\n"
+            f"Please install it using:\n"
+            f"    pip install -r requirements.txt\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+    if _parse_version(installed) < _parse_version(required):
+        print(
+            f"\n[ERROR] cqorc_interfaces version >= {required} is required, but version {installed} is installed.\n"
+            f"Please update it by running:\n"
+            f"    pip install --upgrade -r requirements.txt\n",
+            file=sys.stderr,
+        )
+        sys.exit(1)
+
+
+# Perform validation when common is loaded
+check_cqorc_interfaces_version()
 
 
 def to_iso8061(dt, tz=None):

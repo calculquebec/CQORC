@@ -1,8 +1,11 @@
 #!/bin/env python3
 import os, argparse, datetime
+from common import check_cqorc_interfaces_version
 
-import interfaces.zoom.ZoomInterface as ZoomInterface
-import interfaces.slack.SlackInterface as SlackInterface
+check_cqorc_interfaces_version()
+
+import cqorc_interfaces.zoom.ZoomInterface as ZoomInterface
+import cqorc_interfaces.slack.SlackInterface as SlackInterface
 import CQORCcalendar
 
 from common import valid_date, to_iso8061, ISO_8061_FORMAT, get_config, get_title

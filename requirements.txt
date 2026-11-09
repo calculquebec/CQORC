@@ -1,5 +1,6 @@
 -r requirements/requirements-google.txt
 -r requirements/requirements-slack.txt
 -r requirements/requirements-eventbrite.txt
+-r requirements/requirements-zoom.txt
 -r requirements/requirements-test.txt
 -r requirements/requirements-certificates.txt
